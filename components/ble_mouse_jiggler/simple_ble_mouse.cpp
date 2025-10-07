@@ -1,4 +1,4 @@
-#include "SimpleBLEMouse.h"
+#include "simple_ble_mouse.h"
 
 #ifdef USE_ESP32
 

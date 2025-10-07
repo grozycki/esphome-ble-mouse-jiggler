@@ -7,7 +7,7 @@
 
 #ifdef USE_ESP32
 
-#include "SimpleBLEMouse.h"
+#include "simple_ble_mouse.h"
 
 namespace esphome {
 namespace ble_mouse_jiggler {
