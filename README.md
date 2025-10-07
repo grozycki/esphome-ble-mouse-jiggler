@@ -307,6 +307,113 @@ components/ble_mouse_jiggler/
 
 ## Troubleshooting
 
+### ESP32 BLE Failed Error
+
+If you see `esp32_ble is marked FAILED: unspecified` in logs, try these solutions:
+
+#### 1. Check BLE Configuration Conflicts
+
+Make sure you don't have conflicting BLE components:
+
+```yaml
+# REMOVE these if present - they conflict with ble_mouse_jiggler:
+# bluetooth_proxy:
+# esp32_ble_tracker:
+# esp32_ble_beacon:
+
+# KEEP only this:
+esp32_ble:
+```
+
+#### 2. Add BLE Debugging
+
+Enable detailed BLE logging to see what's failing:
+
+```yaml
+logger:
+  level: DEBUG
+  logs:
+    esp32_ble: DEBUG
+    ble_mouse_jiggler: DEBUG
+    component: DEBUG
+```
+
+#### 3. Check Memory Usage
+
+BLE requires significant RAM. If you have many other components, try:
+
+```yaml
+# Reduce memory usage
+logger:
+  level: WARN  # Less verbose logging
+  
+# Remove unnecessary components temporarily
+# wifi:
+#   power_save_mode: light  # Use less WiFi features
+```
+
+#### 4. ESP32 Variant Issues
+
+Some ESP32 variants have BLE issues. Try:
+
+```yaml
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+    version: recommended
+  
+# Force BLE/WiFi coexistence
+esphome:
+  platformio_options:
+    board_build.partitions: "default.csv"
+    board_build.arduino.memory_type: "qio_qspi"
+```
+
+#### 5. Clean Build
+
+Sometimes a clean build helps:
+
+```bash
+# In ESPHome
+esphome clean your_config.yaml
+esphome compile your_config.yaml
+```
+
+#### 6. Minimal Test Configuration
+
+Try this minimal config first to isolate the issue:
+
+```yaml
+esphome:
+  name: ble-mouse-test
+  platform: ESP32
+  board: esp32dev
+
+wifi:
+  ssid: "your_wifi"
+  password: "your_password"
+
+logger:
+  level: DEBUG
+
+api:
+ota:
+
+# Only enable BLE - no other components
+esp32_ble:
+
+external_components:
+  - source: github://grozycki/esphome-ble-mouse-jiggler@main
+    components:
+      - ble_mouse_jiggler
+
+# Single mouse only for testing
+ble_mouse_jiggler:
+  id: test_mouse
+  device_name: "Test Mouse"
+```
+
 ### Multiple mice not appearing
 - Ensure different `device_name` for each mouse
 - Check ESP32 memory usage in logs
