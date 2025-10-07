@@ -1,4 +1,4 @@
-#include "ble_mouse.h"
+#include "esphome/components/ble_mouse_idf/ble_mouse.h"
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
 
