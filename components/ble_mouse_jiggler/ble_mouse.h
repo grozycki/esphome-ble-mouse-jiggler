@@ -1,5 +1,5 @@
 #include "esphome/core/component.h"
-#include "BleMouse.h" // Library for BLE Mouse implementation
+#include "esphome/components/ble_mouse_idf/src/BleMouse.h"
 
 namespace esphome {
 namespace ble_mouse_jiggler { // Custom namespace, matching the component folder name
