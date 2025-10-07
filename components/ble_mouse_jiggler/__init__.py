@@ -3,6 +3,7 @@ import esphome.config_validation as cv
 from esphome.components import esp32
 from esphome.const import CONF_ID
 from esphome.core import CORE
+from esphome import automation
 
 DEPENDENCIES = ["esp32"]
 CODEOWNERS = ["@grozycki"]
@@ -11,9 +12,9 @@ ble_mouse_jiggler_ns = cg.esphome_ns.namespace("ble_mouse_jiggler")
 BleMouseJiggler = ble_mouse_jiggler_ns.class_("BleMouseJiggler", cg.Component)
 
 # Actions
-StartJigglingAction = ble_mouse_jiggler_ns.class_("StartJigglingAction", cg.Action)
-StopJigglingAction = ble_mouse_jiggler_ns.class_("StopJigglingAction", cg.Action)
-JiggleOnceAction = ble_mouse_jiggler_ns.class_("JiggleOnceAction", cg.Action)
+StartJigglingAction = ble_mouse_jiggler_ns.class_("StartJigglingAction", automation.Action)
+StopJigglingAction = ble_mouse_jiggler_ns.class_("StopJigglingAction", automation.Action)
+JiggleOnceAction = ble_mouse_jiggler_ns.class_("JiggleOnceAction", automation.Action)
 
 CONFIG_SCHEMA = cv.Schema(
     {
@@ -28,9 +29,6 @@ CONFIG_SCHEMA = cv.Schema(
 
 
 async def to_code(config):
-    if CORE.using_arduino:
-        cg.add_library("ESP32-BLE-Mouse", None)
-
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
@@ -42,7 +40,7 @@ async def to_code(config):
 
 
 # Actions
-@cg.register_action("ble_mouse_jiggler.start", StartJigglingAction, cv.Schema({
+@automation.register_action("ble_mouse_jiggler.start", StartJigglingAction, cv.Schema({
     cv.GenerateID(): cv.use_id(BleMouseJiggler),
 }))
 async def start_jiggling_to_code(config, action_id, template_arg, args):
@@ -50,7 +48,7 @@ async def start_jiggling_to_code(config, action_id, template_arg, args):
     return cg.new_Pvariable(action_id, template_arg, parent)
 
 
-@cg.register_action("ble_mouse_jiggler.stop", StopJigglingAction, cv.Schema({
+@automation.register_action("ble_mouse_jiggler.stop", StopJigglingAction, cv.Schema({
     cv.GenerateID(): cv.use_id(BleMouseJiggler),
 }))
 async def stop_jiggling_to_code(config, action_id, template_arg, args):
@@ -58,7 +56,7 @@ async def stop_jiggling_to_code(config, action_id, template_arg, args):
     return cg.new_Pvariable(action_id, template_arg, parent)
 
 
-@cg.register_action("ble_mouse_jiggler.jiggle_once", JiggleOnceAction, cv.Schema({
+@automation.register_action("ble_mouse_jiggler.jiggle_once", JiggleOnceAction, cv.Schema({
     cv.GenerateID(): cv.use_id(BleMouseJiggler),
 }))
 async def jiggle_once_to_code(config, action_id, template_arg, args):
