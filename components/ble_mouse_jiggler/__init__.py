@@ -38,8 +38,8 @@ async def to_code(config):
     cg.add(var.set_jiggle_interval(config["jiggle_interval"]))
     cg.add(var.set_jiggle_distance(config["jiggle_distance"]))
 
-    # Add ESP32-BLE-Mouse library
-    cg.add_library("ESP32-BLE-Mouse", "0.3.1")
+    # Add library dependency
+    cg.add_platformio_option("lib_deps", "t-vk/ESP32 BLE Mouse@^0.3.1")
 
 
 # Actions
