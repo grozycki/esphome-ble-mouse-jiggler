@@ -23,26 +23,10 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
-# -----------------
-# 3. ESP-IDF Dependency Management (Crucial for your fix)
-# -----------------
-
-def get_idf_build_components(config):
-    """
-    Informs ESPHome to include an external folder as an ESP-IDF component.
-    This resolves the 'BleMouse.h: No such file or directory' error in IDF mode.
-    """
-    # The string returned MUST match the folder name containing
-    # the BleMouse source files and the CMakeLists.txt file.
-    return ["ble_mouse_idf"] # <<< CORRECTED FOLDER NAME
-
 BUILD_FLAGS = [
-    # Wymuś dodanie nagłówków z zagnieżdżonego komponentu BleMouse IDF
-    '-I', '$PROJECT_COMPONENTS_DIR/ble_mouse_idf/src'
+    '-I', 'components/ble_mouse_jiggler'
 ]
 
-LIBRARIES = [
-    "T-vK/ESP32 BLE Mouse@^0.2.0"
-]
+LIBRARIES = ["T-vK/ESP32 BLE Mouse@^0.2.0"] # Nadal wymagane, by PlatformIO pobrało kod
 
 PLATFORM = "ESP32"

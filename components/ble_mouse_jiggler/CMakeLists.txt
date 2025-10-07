@@ -1,4 +1,9 @@
 idf_component_register(
-    SRCS "ble_mouse.cpp"
-    REQUIRES ble_mouse_idf
+    SRCS
+        "ble_mouse.cpp"
+        "BleMouse.cpp"
+    INCLUDE_DIRS
+        "."
+    REQUIRES bt
+    PRIV_REQUIRES
 )
