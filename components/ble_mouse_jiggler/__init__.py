@@ -22,4 +22,8 @@ LIBRARIES = [
     "T-vK/ESP32 BLE Mouse@^0.2.0"
 ]
 
+BUILD_FLAGS = [
+    '-I', '.pioenvs/$ID/libdeps/$ID/ESP32 BLE Mouse/src'
+]
+
 PLATFORM = "ESP32"
