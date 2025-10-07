@@ -9,12 +9,12 @@ namespace ble_mouse_jiggler {
 static const char *const TAG = "ble_mouse_jiggler";
 
 void BleMouseJiggler::setup() {
-  ESP_LOGCONFIG(TAG, "Setting up BLE Mouse Jiggler...");
+  ESP_LOGCONFIG(TAG, "Setting up BLE Mouse Jiggler (ID: %d)...", this->mouse_id_);
 
-  this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_);
+  this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_);
   this->ble_mouse_->begin();
 
-  ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler setup complete");
+  ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler %d setup complete", this->mouse_id_);
 }
 
 void BleMouseJiggler::loop() {
@@ -30,28 +30,29 @@ void BleMouseJiggler::loop() {
 }
 
 void BleMouseJiggler::dump_config() {
-  ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler:");
+  ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler %d:", this->mouse_id_);
   ESP_LOGCONFIG(TAG, "  Device Name: %s", this->device_name_.c_str());
   ESP_LOGCONFIG(TAG, "  Manufacturer: %s", this->manufacturer_.c_str());
   ESP_LOGCONFIG(TAG, "  Battery Level: %d%%", this->battery_level_);
   ESP_LOGCONFIG(TAG, "  Jiggle Interval: %d ms", this->jiggle_interval_);
   ESP_LOGCONFIG(TAG, "  Jiggle Distance: %d px", this->jiggle_distance_);
+  ESP_LOGCONFIG(TAG, "  Mouse ID: %d", this->mouse_id_);
   ESP_LOGCONFIG(TAG, "  Connected: %s", this->ble_mouse_ && this->ble_mouse_->isConnected() ? "YES" : "NO");
 }
 
 void BleMouseJiggler::start_jiggling() {
-  ESP_LOGD(TAG, "Starting mouse jiggling");
+  ESP_LOGD(TAG, "Starting mouse jiggling for mouse %d", this->mouse_id_);
   this->jiggling_enabled_ = true;
 }
 
 void BleMouseJiggler::stop_jiggling() {
-  ESP_LOGD(TAG, "Stopping mouse jiggling");
+  ESP_LOGD(TAG, "Stopping mouse jiggling for mouse %d", this->mouse_id_);
   this->jiggling_enabled_ = false;
 }
 
 void BleMouseJiggler::jiggle_once() {
   if (!this->ble_mouse_ || !this->ble_mouse_->isConnected()) {
-    ESP_LOGW(TAG, "Cannot jiggle - mouse not connected");
+    ESP_LOGW(TAG, "Cannot jiggle mouse %d - not connected", this->mouse_id_);
     return;
   }
 
@@ -59,7 +60,7 @@ void BleMouseJiggler::jiggle_once() {
   int8_t move_x = this->jiggle_distance_ * this->jiggle_direction_;
   int8_t move_y = this->jiggle_distance_ * this->jiggle_direction_;
 
-  ESP_LOGV(TAG, "Jiggling mouse: x=%d, y=%d", move_x, move_y);
+  ESP_LOGV(TAG, "Jiggling mouse %d: x=%d, y=%d", this->mouse_id_, move_x, move_y);
 
   // Move in one direction
   this->ble_mouse_->move(move_x, move_y);

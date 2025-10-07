@@ -24,6 +24,7 @@ class BleMouseJiggler : public Component {
   void set_battery_level(uint8_t level) { this->battery_level_ = level; }
   void set_jiggle_interval(uint32_t interval) { this->jiggle_interval_ = interval; }
   void set_jiggle_distance(uint8_t distance) { this->jiggle_distance_ = distance; }
+  void set_mouse_id(uint8_t mouse_id) { this->mouse_id_ = mouse_id; }
 
   // Public methods for manual control
   void start_jiggling();
@@ -38,6 +39,7 @@ class BleMouseJiggler : public Component {
   uint8_t battery_level_{100};
   uint32_t jiggle_interval_{60000}; // 60 seconds in milliseconds
   uint8_t jiggle_distance_{1};
+  uint8_t mouse_id_{0}; // Default mouse ID
 
   uint32_t last_jiggle_time_{0};
   bool jiggling_enabled_{true};

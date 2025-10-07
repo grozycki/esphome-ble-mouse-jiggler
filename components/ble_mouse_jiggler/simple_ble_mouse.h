@@ -1,11 +1,13 @@
 #pragma once
 
-// Simple wrapper for ESP32 BLE Mouse functionality
-// This avoids external library dependencies
+// Enhanced BLE Mouse implementation supporting multiple instances
+// This allows creating multiple virtual mice on one ESP32
 
 #ifdef USE_ESP32
 
 #include <string>
+#include <vector>
+#include <map>
 #include "esp_bt.h"
 #include "esp_gap_ble_api.h"
 #include "esp_gatts_api.h"
@@ -18,7 +20,8 @@ class SimpleBLEMouse {
 public:
     SimpleBLEMouse(const std::string& device_name = "ESP32 Mouse",
                    const std::string& manufacturer = "ESPHome",
-                   uint8_t battery_level = 100);
+                   uint8_t battery_level = 100,
+                   uint8_t mouse_id = 0);
 
     void begin();
     void end();
@@ -28,15 +31,38 @@ public:
     void press(uint8_t button = 1);
     void release(uint8_t button = 1);
 
+    uint8_t getMouseId() const { return mouse_id_; }
+    std::string getDeviceName() const { return device_name_; }
+
+    // Static methods for managing multiple mice
+    static void initBluetooth();
+    static void deinitBluetooth();
+    static SimpleBLEMouse* getMouseById(uint8_t mouse_id);
+    static std::vector<SimpleBLEMouse*> getAllMice();
+
 private:
     std::string device_name_;
     std::string manufacturer_;
     uint8_t battery_level_;
+    uint8_t mouse_id_;
     bool connected_;
 
-    void init_bluetooth_();
+    // Instance-specific BLE handles
+    uint16_t gatts_if_;
+    uint16_t conn_id_;
+    uint16_t service_handle_;
+    uint16_t char_handle_;
+    uint16_t app_id_;
+
     void setup_hid_service_();
     void send_hid_report_(uint8_t* data, size_t length);
+    void start_advertising_();
+
+    // Static management
+    static std::map<uint8_t, SimpleBLEMouse*> mice_instances_;
+    static std::map<uint16_t, SimpleBLEMouse*> app_to_mouse_map_;
+    static bool bluetooth_initialized_;
+    static uint16_t next_app_id_;
 
     static void gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param);
     static void gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);

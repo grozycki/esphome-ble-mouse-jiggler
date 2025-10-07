@@ -5,7 +5,7 @@ from esphome.const import CONF_ID
 from esphome.core import CORE
 from esphome import automation
 
-DEPENDENCIES = ["esp32"]
+DEPENDENCIES = ["esp32", "esp32_ble"]  # Added esp32_ble dependency
 CODEOWNERS = ["@grozycki"]
 
 ble_mouse_jiggler_ns = cg.esphome_ns.namespace("ble_mouse_jiggler")
@@ -16,6 +16,9 @@ StartJigglingAction = ble_mouse_jiggler_ns.class_("StartJigglingAction", automat
 StopJigglingAction = ble_mouse_jiggler_ns.class_("StopJigglingAction", automation.Action)
 JiggleOnceAction = ble_mouse_jiggler_ns.class_("JiggleOnceAction", automation.Action)
 
+# Counter for auto-generating mouse IDs
+_mouse_id_counter = 0
+
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(BleMouseJiggler),
@@ -24,11 +27,14 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional("battery_level", default=100): cv.int_range(min=0, max=100),
         cv.Optional("jiggle_interval", default="60s"): cv.positive_time_period_milliseconds,
         cv.Optional("jiggle_distance", default=1): cv.int_range(min=1, max=10),
+        # mouse_id is now auto-generated - no need for user to specify
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
 
 async def to_code(config):
+    global _mouse_id_counter
+
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
@@ -37,6 +43,10 @@ async def to_code(config):
     cg.add(var.set_battery_level(config["battery_level"]))
     cg.add(var.set_jiggle_interval(config["jiggle_interval"]))
     cg.add(var.set_jiggle_distance(config["jiggle_distance"]))
+
+    # Auto-assign mouse_id
+    cg.add(var.set_mouse_id(_mouse_id_counter))
+    _mouse_id_counter += 1
 
     # Add library dependency
     cg.add_platformio_option("lib_deps", "t-vk/ESP32 BLE Mouse@^0.3.1")
