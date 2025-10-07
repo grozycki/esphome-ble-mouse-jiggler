@@ -4,6 +4,9 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/automation.h"
+
+#ifdef USE_ESP32
+
 #include "BleMouse.h"
 
 namespace esphome {
@@ -74,3 +77,5 @@ template<typename... Ts> class JiggleOnceAction : public Action<Ts...> {
 
 }  // namespace ble_mouse_jiggler
 }  // namespace esphome
+
+#endif  // USE_ESP32

@@ -1,6 +1,8 @@
 #include "ble_mouse.h"
 #include "esphome/core/log.h"
 
+#ifdef USE_ESP32
+
 namespace esphome {
 namespace ble_mouse_jiggler {
 
@@ -76,3 +78,5 @@ bool BleMouseJiggler::is_connected() {
 
 }  // namespace ble_mouse_jiggler
 }  // namespace esphome
+
+#endif  // USE_ESP32
