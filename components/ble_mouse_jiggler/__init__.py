@@ -36,12 +36,11 @@ def get_idf_build_components(config):
     # the BleMouse source files and the CMakeLists.txt file.
     return ["ble_mouse_idf"] # <<< CORRECTED FOLDER NAME
 
-# -----------------
-# 4. Standard PlatformIO Dependencies
-# -----------------
+BUILD_FLAGS = [
+    # Wymuś dodanie nagłówków z zagnieżdżonego komponentu BleMouse IDF
+    '-I', '$PROJECT_COMPONENTS_DIR/ble_mouse_idf/src'
+]
 
-# Explicitly declare the library dependency. This ensures it's downloaded
-# by PlatformIO/ESPHome, even though it's manually included via the IDF component system.
 LIBRARIES = [
     "T-vK/ESP32 BLE Mouse@^0.2.0"
 ]
