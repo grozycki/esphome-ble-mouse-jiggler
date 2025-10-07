@@ -48,6 +48,31 @@ async def to_code(config):
     cg.add(var.set_mouse_id(_mouse_id_counter))
     _mouse_id_counter += 1
 
+    # Create unique service names based on component ID
+    component_id = str(config[CONF_ID])
+
+    # Register services for Home Assistant with unique names per mouse
+    await cg.register_component_service(
+        var,
+        f"start_jiggling_{component_id}",
+        "start_jiggling",
+        []
+    )
+
+    await cg.register_component_service(
+        var,
+        f"stop_jiggling_{component_id}",
+        "stop_jiggling",
+        []
+    )
+
+    await cg.register_component_service(
+        var,
+        f"jiggle_once_{component_id}",
+        "jiggle_once",
+        []
+    )
+
     # Add library dependency
     cg.add_platformio_option("lib_deps", "t-vk/ESP32 BLE Mouse@^0.3.1")
 

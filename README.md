@@ -25,7 +25,6 @@ external_components:
   - source: github://grozycki/esphome-ble-mouse-jiggler@main
     components:
       - ble_mouse_jiggler
-    refresh: 1s
 
 # Single mouse configuration
 ble_mouse_jiggler:
@@ -49,7 +48,6 @@ external_components:
   - source: github://grozycki/esphome-ble-mouse-jiggler@main
     components:
       - ble_mouse_jiggler
-    refresh: 1s
 
 # Multiple mice configuration using list syntax
 ble_mouse_jiggler:
@@ -145,6 +143,104 @@ automation:
 - `ble_mouse_jiggler.start` - Start automatic jiggling for specified mouse
 - `ble_mouse_jiggler.stop` - Stop automatic jiggling for specified mouse
 - `ble_mouse_jiggler.jiggle_once` - Perform single mouse movement for specified mouse
+
+## Home Assistant Integration
+
+The component automatically exposes services in Home Assistant that you can call directly:
+
+### Available Services in Home Assistant
+
+Each mouse jiggler component creates individual services based on the component ID:
+
+- `esphome.{device_name}_start_jiggling_{component_id}` - Start automatic jiggling for specific mouse
+- `esphome.{device_name}_stop_jiggling_{component_id}` - Stop automatic jiggling for specific mouse
+- `esphome.{device_name}_jiggle_once_{component_id}` - Perform single mouse movement for specific mouse
+
+### Using Services in Home Assistant
+
+You can call these services from Home Assistant automations, scripts, or manually:
+
+```yaml
+# Configuration with multiple mice
+ble_mouse_jiggler:
+  - id: work_mouse
+    device_name: "Work Mouse Jiggler"
+  - id: gaming_mouse
+    device_name: "Gaming Mouse Jiggler"
+
+# Home Assistant automation example - controlling specific mice
+automation:
+  - alias: "Start work mouse during work hours"
+    trigger:
+      platform: time
+      at: "09:00:00"
+    action:
+      service: esphome.work_room_start_jiggling_work_mouse
+      
+  - alias: "Start gaming mouse in evening"
+    trigger:
+      platform: time
+      at: "18:00:00"
+    action:
+      service: esphome.work_room_start_jiggling_gaming_mouse
+      
+  - alias: "Stop all mice at night"
+    trigger:
+      platform: time
+      at: "23:00:00"
+    action:
+      - service: esphome.work_room_stop_jiggling_work_mouse
+      - service: esphome.work_room_stop_jiggling_gaming_mouse
+
+# Manual service calls for specific mice
+script:
+  work_mouse_jiggle:
+    sequence:
+      - service: esphome.work_room_jiggle_once_work_mouse
+      
+  gaming_mouse_jiggle:
+    sequence:
+      - service: esphome.work_room_jiggle_once_gaming_mouse
+```
+
+### Service Naming Pattern
+
+Services follow this naming pattern:
+- **Device name**: `work_room` (your ESPHome device name)
+- **Action**: `start_jiggling`, `stop_jiggling`, `jiggle_once`
+- **Mouse ID**: `work_mouse`, `gaming_mouse` (component IDs from config)
+
+**Complete service name**: `esphome.{device_name}_{action}_{mouse_id}`
+
+### Examples for Different Configurations
+
+**Single mouse:**
+```yaml
+ble_mouse_jiggler:
+  id: my_mouse
+  
+# Service: esphome.work_room_start_jiggling_my_mouse
+```
+
+**Multiple mice:**
+```yaml
+ble_mouse_jiggler:
+  - id: office_mouse
+    device_name: "Office Mouse"
+  - id: home_mouse  
+    device_name: "Home Mouse"
+  - id: laptop_mouse
+    device_name: "Laptop Mouse"
+
+# Services:
+# esphome.work_room_start_jiggling_office_mouse
+# esphome.work_room_start_jiggling_home_mouse  
+# esphome.work_room_start_jiggling_laptop_mouse
+```
+
+### Service Discovery
+
+Services appear automatically in Home Assistant under **Developer Tools > Services** with names based on your ESPHome device name and component IDs.
 
 ## Hardware Requirements
 
