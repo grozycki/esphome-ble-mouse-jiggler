@@ -1,52 +1,78 @@
-#include "BleMouse.h"
+#include "ble_mouse.h"
 #include "esphome/core/log.h"
-#include "esphome/core/helpers.h"
-
-// Tag for logging, matching the component folder name
-static const char *const TAG = "ble_mouse_jiggler";
 
 namespace esphome {
 namespace ble_mouse_jiggler {
 
-void BleMouseComponent::setup() {
+static const char *const TAG = "ble_mouse_jiggler";
+
+void BleMouseJiggler::setup() {
   ESP_LOGCONFIG(TAG, "Setting up BLE Mouse Jiggler...");
 
-  // Initialize the mouse with a default device name
-  // This is the name you'll see when pairing the device on your computer
-  this->bleMouse.begin("ESPHome Mouse Jiggler");
+  this->ble_mouse_ = new BleMouse(this->device_name_, this->manufacturer_, this->battery_level_);
+  this->ble_mouse_->begin();
+
+  ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler setup complete");
 }
 
-void BleMouseComponent::loop() {
-  // Check if the BLE mouse is connected and paired
-  if (this->bleMouse.isConnected()) {
-    uint32_t now = millis();
+void BleMouseJiggler::loop() {
+  if (!this->jiggling_enabled_ || !this->ble_mouse_->isConnected()) {
+    return;
+  }
 
-    // Check if the configured move interval has passed
-    if (now - this->last_move_time_ >= MOVE_INTERVAL_MS) {
-      this->make_small_move();
-      this->last_move_time_ = now;
-    }
+  uint32_t now = millis();
+  if (now - this->last_jiggle_time_ >= this->jiggle_interval_) {
+    this->jiggle_once();
+    this->last_jiggle_time_ = now;
   }
 }
 
-void BleMouseComponent::make_small_move() {
-  // Logic to simulate a small, barely noticeable movement.
-  // We alternate between (1, 1) and (-1, -1) to keep the cursor in the same spot over time,
-  // while still generating mouse activity.
-
-  // Determine if we are in an even or odd interval since startup
-  // This creates the alternating move direction
-  bool is_even_interval = (this->last_move_time_ / MOVE_INTERVAL_MS) % 2 == 0;
-
-  int8_t move_x = is_even_interval ? 1 : -1;
-  int8_t move_y = is_even_interval ? 1 : -1;
-
-  // Send the movement vector: (x, y, vertical_scroll, horizontal_scroll)
-  this->bleMouse.move(move_x, move_y);
-
-  ESP_LOGD(TAG, "Cursor moved (%d, %d). Next move in %d seconds.",
-           move_x, move_y, MOVE_INTERVAL_MS / 1000);
+void BleMouseJiggler::dump_config() {
+  ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler:");
+  ESP_LOGCONFIG(TAG, "  Device Name: %s", this->device_name_.c_str());
+  ESP_LOGCONFIG(TAG, "  Manufacturer: %s", this->manufacturer_.c_str());
+  ESP_LOGCONFIG(TAG, "  Battery Level: %d%%", this->battery_level_);
+  ESP_LOGCONFIG(TAG, "  Jiggle Interval: %d ms", this->jiggle_interval_);
+  ESP_LOGCONFIG(TAG, "  Jiggle Distance: %d px", this->jiggle_distance_);
+  ESP_LOGCONFIG(TAG, "  Connected: %s", this->ble_mouse_ && this->ble_mouse_->isConnected() ? "YES" : "NO");
 }
 
-} // namespace ble_mouse_jiggler
-} // namespace esphome
+void BleMouseJiggler::start_jiggling() {
+  ESP_LOGD(TAG, "Starting mouse jiggling");
+  this->jiggling_enabled_ = true;
+}
+
+void BleMouseJiggler::stop_jiggling() {
+  ESP_LOGD(TAG, "Stopping mouse jiggling");
+  this->jiggling_enabled_ = false;
+}
+
+void BleMouseJiggler::jiggle_once() {
+  if (!this->ble_mouse_ || !this->ble_mouse_->isConnected()) {
+    ESP_LOGW(TAG, "Cannot jiggle - mouse not connected");
+    return;
+  }
+
+  // Move mouse in alternating directions to create a subtle jiggle
+  int8_t move_x = this->jiggle_distance_ * this->jiggle_direction_;
+  int8_t move_y = this->jiggle_distance_ * this->jiggle_direction_;
+
+  ESP_LOGV(TAG, "Jiggling mouse: x=%d, y=%d", move_x, move_y);
+
+  // Move in one direction
+  this->ble_mouse_->move(move_x, move_y);
+  delay(50); // Small delay
+
+  // Move back to original position
+  this->ble_mouse_->move(-move_x, -move_y);
+
+  // Alternate direction for next jiggle
+  this->jiggle_direction_ *= -1;
+}
+
+bool BleMouseJiggler::is_connected() {
+  return this->ble_mouse_ && this->ble_mouse_->isConnected();
+}
+
+}  // namespace ble_mouse_jiggler
+}  // namespace esphome
