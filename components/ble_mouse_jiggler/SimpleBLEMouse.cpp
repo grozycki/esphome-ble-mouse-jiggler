@@ -87,7 +87,7 @@ void SimpleBLEMouse::gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_i
             g_mouse_instance->connected_ = true;
             ESP_LOGI(TAG, "BLE device connected");
             break;
-        case ESP_GATTS_DISCONNECT_EVT:
+        case ESP_GATTS_DISCONNECT_EVT: {
             g_mouse_instance->connected_ = false;
             ESP_LOGI(TAG, "BLE device disconnected, restarting advertising");
             // Restart advertising with proper parameters
@@ -100,6 +100,7 @@ void SimpleBLEMouse::gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_i
             adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
             esp_ble_gap_start_advertising(&adv_params);
             break;
+        }
         default:
             break;
     }
