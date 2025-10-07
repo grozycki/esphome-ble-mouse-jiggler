@@ -15,15 +15,6 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
-# IMPORTANT: Define the PlatformIO library dependency here.
-# This ensures that the ESP32-BLE-Mouse library is downloaded and available
-# for compilation, even when using the ESP-IDF framework.
-LIBRARIES = [
-    "T-vK/ESP32 BLE Mouse@^0.2.0"
-]
-
-BUILD_FLAGS = [
-    '-I', '.pioenvs/$ID/libdeps/$ID/ESP32 BLE Mouse/src'
-]
+REQUIRED_IDF_COMPONENTS = ["ble_mouse_idf"]
 
 PLATFORM = "ESP32"
