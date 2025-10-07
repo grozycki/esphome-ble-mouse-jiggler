@@ -48,11 +48,17 @@ async def to_code(config):
     cg.add(var.set_mouse_id(_mouse_id_counter))
     _mouse_id_counter += 1
 
+    # Framework-dependent configuration
+    if CORE.using_arduino:
+        # Arduino framework - use ESP32-BLE-Mouse library
+        cg.add_platformio_option("lib_deps", "t-vk/ESP32 BLE Mouse@^0.3.1")
+        cg.add_define("USE_ARDUINO_FRAMEWORK")
+    else:
+        # ESP-IDF framework - use native ESP-IDF BLE API
+        cg.add_define("USE_ESP_IDF_FRAMEWORK")
+
     # Note: Services will be automatically available in Home Assistant
     # through the ESPHome API as ble_mouse_jiggler.start, ble_mouse_jiggler.stop, etc.
-
-    # Add library dependency
-    cg.add_platformio_option("lib_deps", "t-vk/ESP32 BLE Mouse@^0.3.1")
 
 
 # Actions
