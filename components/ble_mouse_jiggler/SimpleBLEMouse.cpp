@@ -2,6 +2,7 @@
 
 #ifdef USE_ESP32
 
+#include <string>
 #include "esp_log.h"
 #include <string.h>
 
@@ -57,9 +58,17 @@ SimpleBLEMouse::SimpleBLEMouse(const std::string& device_name, const std::string
 
 void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
     switch (event) {
-        case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
-            esp_ble_gap_start_advertising(&param->adv_data_cmpl.adv_data_len);
+        case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT: {
+            esp_ble_adv_params_t adv_params = {};
+            adv_params.adv_int_min = 0x20;
+            adv_params.adv_int_max = 0x40;
+            adv_params.adv_type = ADV_TYPE_IND;
+            adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
+            adv_params.channel_map = ADV_CHNL_ALL;
+            adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
+            esp_ble_gap_start_advertising(&adv_params);
             break;
+        }
         default:
             break;
     }
@@ -81,7 +90,15 @@ void SimpleBLEMouse::gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_i
         case ESP_GATTS_DISCONNECT_EVT:
             g_mouse_instance->connected_ = false;
             ESP_LOGI(TAG, "BLE device disconnected, restarting advertising");
-            esp_ble_gap_start_advertising(nullptr);
+            // Restart advertising with proper parameters
+            esp_ble_adv_params_t adv_params = {};
+            adv_params.adv_int_min = 0x20;
+            adv_params.adv_int_max = 0x40;
+            adv_params.adv_type = ADV_TYPE_IND;
+            adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
+            adv_params.channel_map = ADV_CHNL_ALL;
+            adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
+            esp_ble_gap_start_advertising(&adv_params);
             break;
         default:
             break;
