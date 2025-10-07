@@ -11,7 +11,7 @@ static const char *const TAG = "ble_mouse_jiggler";
 void BleMouseJiggler::setup() {
   ESP_LOGCONFIG(TAG, "Setting up BLE Mouse Jiggler...");
 
-  this->ble_mouse_ = new BleMouse(this->device_name_, this->manufacturer_, this->battery_level_);
+  this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_);
   this->ble_mouse_->begin();
 
   ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler setup complete");

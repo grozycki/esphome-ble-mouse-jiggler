@@ -7,7 +7,7 @@
 
 #ifdef USE_ESP32
 
-#include "BleMouse.h"
+#include "SimpleBLEMouse.h"
 
 namespace esphome {
 namespace ble_mouse_jiggler {
@@ -32,7 +32,7 @@ class BleMouseJiggler : public Component {
   bool is_connected();
 
  protected:
-  BleMouse *ble_mouse_{nullptr};
+  SimpleBLEMouse *ble_mouse_{nullptr};
   std::string device_name_{"ESP32 Mouse Jiggler"};
   std::string manufacturer_{"ESPHome"};
   uint8_t battery_level_{100};
