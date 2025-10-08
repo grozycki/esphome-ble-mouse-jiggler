@@ -22,10 +22,10 @@ CONF_PIN_CODE = "pin_code"
 ble_mouse_jiggler_ns = cg.esphome_ns.namespace("ble_mouse_jiggler")
 BleMouseJiggler = ble_mouse_jiggler_ns.class_("BleMouseJiggler", cg.Component)
 
-# Actions for automation
-StartJigglingAction = ble_mouse_jiggler_ns.class_("StartJigglingAction", cg.Action)
-StopJigglingAction = ble_mouse_jiggler_ns.class_("StopJigglingAction", cg.Action)
-JiggleOnceAction = ble_mouse_jiggler_ns.class_("JiggleOnceAction", cg.Action)
+# Actions for automation - using correct base class
+StartJigglingAction = ble_mouse_jiggler_ns.class_("StartJigglingAction", automation.Action)
+StopJigglingAction = ble_mouse_jiggler_ns.class_("StopJigglingAction", automation.Action)
+JiggleOnceAction = ble_mouse_jiggler_ns.class_("JiggleOnceAction", automation.Action)
 
 # Configuration schema
 CONFIG_SCHEMA = cv.Schema(
