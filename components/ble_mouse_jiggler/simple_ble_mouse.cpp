@@ -219,6 +219,8 @@ void SimpleBLEMouse::start_advertising_rotation_() {
 void SimpleBLEMouse::start_single_mouse_advertising_(SimpleBLEMouse* mouse) {
     if (!mouse) return;
 
+    ESP_LOGI(TAG, "🔄 Starting SIMPLIFIED advertising for mouse %d: %s", mouse->mouse_id_, mouse->device_name_.c_str());
+
     // Ustaw nazwę urządzenia
     esp_ble_gap_set_device_name(mouse->device_name_.c_str());
 
@@ -230,16 +232,11 @@ void SimpleBLEMouse::start_single_mouse_advertising_(SimpleBLEMouse* mouse) {
     adv_params.channel_map = ADV_CHNL_ALL;
     adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
 
-    // Konfiguracja danych reklamy z UUID serwisów HID
-    static uint8_t service_uuids[4] = {
-        0x12, 0x18,  // HID Service UUID 0x1812 (little endian)
-        0x0F, 0x18   // Battery Service UUID 0x180F (little endian)
-    };
-
+    // NAPRAWKA: Bardzo uproszczone advertising data bez problematycznych elementów
     esp_ble_adv_data_t adv_data = {};
     adv_data.set_scan_rsp = false;
     adv_data.include_name = true;
-    adv_data.include_txpower = true;
+    adv_data.include_txpower = false; // Wyłączam tx power - może powodować problemy
     adv_data.min_interval = 0x20;
     adv_data.max_interval = 0x40;
     adv_data.appearance = 0x03C2; // HID Mouse appearance (962 decimal = 0x03C2)
@@ -247,14 +244,40 @@ void SimpleBLEMouse::start_single_mouse_advertising_(SimpleBLEMouse* mouse) {
     adv_data.p_manufacturer_data = nullptr;
     adv_data.service_data_len = 0;
     adv_data.p_service_data = nullptr;
-    adv_data.service_uuid_len = 4; // 2 services × 2 bytes each
-    adv_data.p_service_uuid = service_uuids;
+    adv_data.service_uuid_len = 0; // NAPRAWKA: Usuwam UUID serwisów - może powodować ESP_ERR_INVALID_ARG
+    adv_data.p_service_uuid = nullptr; // NAPRAWKA: Null zamiast service_uuids
+    // NAPRAWKA: Uproszczone flagi
     adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
 
     esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set advertising data for mouse %d: %s", mouse->mouse_id_, esp_err_to_name(ret));
-        return;
+        ESP_LOGI(TAG, "🔧 TRYING EVEN SIMPLER advertising data...");
+
+        // FALLBACK: Jeszcze prostsze advertising data
+        esp_ble_adv_data_t simple_adv_data = {};
+        simple_adv_data.set_scan_rsp = false;
+        simple_adv_data.include_name = true;
+        simple_adv_data.include_txpower = false;
+        simple_adv_data.min_interval = 0;
+        simple_adv_data.max_interval = 0;
+        simple_adv_data.appearance = 0; // Brak appearance
+        simple_adv_data.manufacturer_len = 0;
+        simple_adv_data.p_manufacturer_data = nullptr;
+        simple_adv_data.service_data_len = 0;
+        simple_adv_data.p_service_data = nullptr;
+        simple_adv_data.service_uuid_len = 0;
+        simple_adv_data.p_service_uuid = nullptr;
+        simple_adv_data.flag = ESP_BLE_ADV_FLAG_GEN_DISC; // Tylko basic discoverable
+
+        ret = esp_ble_gap_config_adv_data(&simple_adv_data);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "FALLBACK ALSO FAILED for mouse %d: %s", mouse->mouse_id_, esp_err_to_name(ret));
+            return;
+        }
+        ESP_LOGI(TAG, "✅ FALLBACK advertising data set successfully for mouse %d", mouse->mouse_id_);
+    } else {
+        ESP_LOGI(TAG, "✅ Normal advertising data set successfully for mouse %d", mouse->mouse_id_);
     }
 
     ret = esp_ble_gap_start_advertising(&adv_params);
@@ -263,8 +286,7 @@ void SimpleBLEMouse::start_single_mouse_advertising_(SimpleBLEMouse* mouse) {
         return;
     }
 
-    ESP_LOGI(TAG, "📡 Now advertising mouse %d: %s (HID Mouse with Battery service)",
-             mouse->mouse_id_, mouse->device_name_.c_str());
+    ESP_LOGI(TAG, "📡 Successfully started advertising for mouse %d: %s", mouse->mouse_id_, mouse->device_name_.c_str());
 }
 
 void SimpleBLEMouse::create_rotation_task_() {
