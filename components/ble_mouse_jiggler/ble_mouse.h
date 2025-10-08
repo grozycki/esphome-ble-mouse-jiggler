@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esphome/core/component.h"
+#include "esphome/core/automation.h" // Add missing include for Action
 #include "simple_ble_mouse.h"
 
 #ifdef USE_ESP32
