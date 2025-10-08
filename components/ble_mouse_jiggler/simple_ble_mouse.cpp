@@ -219,7 +219,7 @@ void SimpleBLEMouse::start_advertising_rotation_() {
 void SimpleBLEMouse::start_single_mouse_advertising_(SimpleBLEMouse* mouse) {
     if (!mouse) return;
 
-    ESP_LOGI(TAG, "🔄 Starting SIMPLIFIED advertising for mouse %d: %s", mouse->mouse_id_, mouse->device_name_.c_str());
+    ESP_LOGI(TAG, "🔄 Starting ULTRA SIMPLE advertising for mouse %d: %s", mouse->mouse_id_, mouse->device_name_.c_str());
 
     // Ustaw nazwę urządzenia
     esp_ble_gap_set_device_name(mouse->device_name_.c_str());
@@ -232,61 +232,36 @@ void SimpleBLEMouse::start_single_mouse_advertising_(SimpleBLEMouse* mouse) {
     adv_params.channel_map = ADV_CHNL_ALL;
     adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
 
-    // NAPRAWKA: Bardzo uproszczone advertising data bez problematycznych elementów
-    esp_ble_adv_data_t adv_data = {};
-    adv_data.set_scan_rsp = false;
-    adv_data.include_name = true;
-    adv_data.include_txpower = false; // Wyłączam tx power - może powodować problemy
-    adv_data.min_interval = 0x20;
-    adv_data.max_interval = 0x40;
-    adv_data.appearance = 0x03C2; // HID Mouse appearance (962 decimal = 0x03C2)
-    adv_data.manufacturer_len = 0;
-    adv_data.p_manufacturer_data = nullptr;
-    adv_data.service_data_len = 0;
-    adv_data.p_service_data = nullptr;
-    adv_data.service_uuid_len = 0; // NAPRAWKA: Usuwam UUID serwisów - może powodować ESP_ERR_INVALID_ARG
-    adv_data.p_service_uuid = nullptr; // NAPRAWKA: Null zamiast service_uuids
-    // NAPRAWKA: Uproszczone flagi
-    adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
+    // RADYKALNA NAPRAWKA: Całkowicie pomiń esp_ble_gap_config_adv_data()
+    // Użyj tylko podstawowe advertising bez metadanych
+    ESP_LOGI(TAG, "🚀 SKIPPING advertising data configuration - using basic advertising only");
+    ESP_LOGI(TAG, "   Device will be visible as: %s", mouse->device_name_.c_str());
 
-    esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
+    esp_err_t ret = esp_ble_gap_start_advertising(&adv_params);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set advertising data for mouse %d: %s", mouse->mouse_id_, esp_err_to_name(ret));
-        ESP_LOGI(TAG, "🔧 TRYING EVEN SIMPLER advertising data...");
+        ESP_LOGE(TAG, "Failed to start basic advertising for mouse %d: %s", mouse->mouse_id_, esp_err_to_name(ret));
+        ESP_LOGI(TAG, "🔧 TRYING with even simpler advertising parameters...");
 
-        // FALLBACK: Jeszcze prostsze advertising data
-        esp_ble_adv_data_t simple_adv_data = {};
-        simple_adv_data.set_scan_rsp = false;
-        simple_adv_data.include_name = true;
-        simple_adv_data.include_txpower = false;
-        simple_adv_data.min_interval = 0;
-        simple_adv_data.max_interval = 0;
-        simple_adv_data.appearance = 0; // Brak appearance
-        simple_adv_data.manufacturer_len = 0;
-        simple_adv_data.p_manufacturer_data = nullptr;
-        simple_adv_data.service_data_len = 0;
-        simple_adv_data.p_service_data = nullptr;
-        simple_adv_data.service_uuid_len = 0;
-        simple_adv_data.p_service_uuid = nullptr;
-        simple_adv_data.flag = ESP_BLE_ADV_FLAG_GEN_DISC; // Tylko basic discoverable
+        // OSTATECZNY FALLBACK: Najprostsze możliwe parametry
+        esp_ble_adv_params_t minimal_adv_params = {};
+        minimal_adv_params.adv_int_min = 0x100; // Wolniejsze advertising
+        minimal_adv_params.adv_int_max = 0x200;
+        minimal_adv_params.adv_type = ADV_TYPE_IND;
+        minimal_adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
+        minimal_adv_params.channel_map = ADV_CHNL_ALL;
+        minimal_adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
 
-        ret = esp_ble_gap_config_adv_data(&simple_adv_data);
+        ret = esp_ble_gap_start_advertising(&minimal_adv_params);
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "FALLBACK ALSO FAILED for mouse %d: %s", mouse->mouse_id_, esp_err_to_name(ret));
+            ESP_LOGE(TAG, "MINIMAL ADVERTISING ALSO FAILED for mouse %d: %s", mouse->mouse_id_, esp_err_to_name(ret));
             return;
         }
-        ESP_LOGI(TAG, "✅ FALLBACK advertising data set successfully for mouse %d", mouse->mouse_id_);
+        ESP_LOGI(TAG, "✅ MINIMAL advertising started successfully for mouse %d", mouse->mouse_id_);
     } else {
-        ESP_LOGI(TAG, "✅ Normal advertising data set successfully for mouse %d", mouse->mouse_id_);
+        ESP_LOGI(TAG, "✅ BASIC advertising started successfully for mouse %d", mouse->mouse_id_);
     }
 
-    ret = esp_ble_gap_start_advertising(&adv_params);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start advertising for mouse %d: %s", mouse->mouse_id_, esp_err_to_name(ret));
-        return;
-    }
-
-    ESP_LOGI(TAG, "📡 Successfully started advertising for mouse %d: %s", mouse->mouse_id_, mouse->device_name_.c_str());
+    ESP_LOGI(TAG, "📡 Device '%s' should now be discoverable in Bluetooth settings", mouse->device_name_.c_str());
 }
 
 void SimpleBLEMouse::create_rotation_task_() {
@@ -619,51 +594,33 @@ void SimpleBLEMouse::disablePairingMode() {
 }
 
 void SimpleBLEMouse::start_pairing_advertising_() {
-    ESP_LOGI(TAG, "🔄 Starting simplified pairing advertising for mouse %d", mouse_id_);
+    ESP_LOGI(TAG, "🔄 Starting ULTRA SIMPLE pairing advertising for mouse %d", mouse_id_);
 
-    // Uproszczone parametry advertising bez problematycznych flag
+    // Ustaw nazwę urządzenia
     esp_ble_gap_set_device_name(device_name_.c_str());
 
     esp_ble_adv_params_t adv_params = {};
-    adv_params.adv_int_min = 0x20; // Nieco wolniejsze ale stabilniejsze
+    adv_params.adv_int_min = 0x20; // Szybsze advertising dla parowania
     adv_params.adv_int_max = 0x40;
     adv_params.adv_type = ADV_TYPE_IND;
     adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
     adv_params.channel_map = ADV_CHNL_ALL;
     adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
 
-    // Bardzo uproszczone advertising data - tylko podstawowe informacje
-    esp_ble_adv_data_t adv_data = {};
-    adv_data.set_scan_rsp = false;
-    adv_data.include_name = true;
-    adv_data.include_txpower = false; // Wyłączam tx power - może powodować problemy
-    adv_data.min_interval = 0x20;
-    adv_data.max_interval = 0x40;
-    adv_data.appearance = 0x03C2; // Mouse appearance
-    adv_data.manufacturer_len = 0;
-    adv_data.p_manufacturer_data = nullptr;
-    adv_data.service_data_len = 0;
-    adv_data.p_service_data = nullptr;
-    adv_data.service_uuid_len = 0; // Upraszczam - usuwam UUID
-    adv_data.p_service_uuid = nullptr;
-    // NAPRAWKA: Uproszczone flagi - usuwam problematyczne DMT flags
-    adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
+    // RADYKALNA NAPRAWKA: Całkowicie pomiń esp_ble_gap_config_adv_data() także w trybie parowania
+    ESP_LOGI(TAG, "🚀 SKIPPING pairing advertising data configuration - using basic advertising only");
+    ESP_LOGI(TAG, "   Device will be visible as: %s (PAIRING MODE)", device_name_.c_str());
 
-    esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
+    esp_err_t ret = esp_ble_gap_start_advertising(&adv_params);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set simplified advertising data for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
-        ESP_LOGI(TAG, "🔧 Falling back to basic advertising...");
-        // Fallback: spróbuj jeszcze prostsze advertising
+        ESP_LOGE(TAG, "Failed to start basic pairing advertising for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
+        ESP_LOGI(TAG, "🔧 FALLBACK: Using start_advertising_() instead...");
+        // Ostateczny fallback - użyj standardowej funkcji advertising
         start_advertising_();
         return;
     }
 
-    ret = esp_ble_gap_start_advertising(&adv_params);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start simplified advertising for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
-        return;
-    }
-
-    ESP_LOGI(TAG, "✅ SIMPLIFIED PAIRING ADVERTISING started for mouse %d: %s", mouse_id_, device_name_.c_str());
+    ESP_LOGI(TAG, "✅ ULTRA SIMPLE PAIRING ADVERTISING started for mouse %d: %s", mouse_id_, device_name_.c_str());
+    ESP_LOGI(TAG, "📡 Device should be highly discoverable for pairing now!");
 }
 #endif // USE_ESP32
