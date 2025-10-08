@@ -64,15 +64,34 @@ void BleMouseJiggler::dump_config() {
   if (this->ble_mouse_ == nullptr) {
     ESP_LOGW(TAG, "⚠️  setup() was not called - starting BLE Mouse from dump_config() as fallback!");
 
-    ESP_LOGCONFIG(TAG, "=== FALLBACK BLE MOUSE SETUP START ===");
-    ESP_LOGCONFIG(TAG, "Creating SimpleBLEMouse instance in fallback mode...");
+    ESP_LOGE(TAG, "=== FALLBACK BLE MOUSE SETUP START ===");
+    ESP_LOGE(TAG, "Creating SimpleBLEMouse instance in fallback mode...");
 
     this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_, this->pin_code_);
-    ESP_LOGCONFIG(TAG, "SimpleBLEMouse instance created successfully");
+    ESP_LOGE(TAG, "SimpleBLEMouse instance created successfully");
 
-    ESP_LOGCONFIG(TAG, "Calling SimpleBLEMouse::begin() in fallback mode...");
+    ESP_LOGE(TAG, "Calling SimpleBLEMouse::begin() in fallback mode...");
     this->ble_mouse_->begin();
-    ESP_LOGCONFIG(TAG, "SimpleBLEMouse::begin() completed - BLE Mouse should now be active!");
+    ESP_LOGE(TAG, "SimpleBLEMouse::begin() completed - BLE Mouse should now be active!");
+
+    // Uruchom w osobnym task po krótkiej chwili
+    ESP_LOGE(TAG, "Creating delayed startup task...");
+    xTaskCreate([](void* param) {
+      BleMouseJiggler* self = static_cast<BleMouseJiggler*>(param);
+      vTaskDelay(pdMS_TO_TICKS(2000)); // Czekaj 2 sekundy
+
+      ESP_LOGE("ble_mouse_jiggler", "🚀 DELAYED STARTUP: Re-initializing SimpleBLEMouse...");
+      if (self->ble_mouse_) {
+        delete self->ble_mouse_;
+      }
+
+      self->ble_mouse_ = new SimpleBLEMouse(self->device_name_, self->manufacturer_, self->battery_level_, self->mouse_id_, self->pin_code_);
+      ESP_LOGE("ble_mouse_jiggler", "🚀 DELAYED STARTUP: Calling begin()...");
+      self->ble_mouse_->begin();
+      ESP_LOGE("ble_mouse_jiggler", "🚀 DELAYED STARTUP: BLE Mouse should now be fully operational!");
+
+      vTaskDelete(nullptr);
+    }, "ble_mouse_delayed", 4096, this, 5, nullptr);
   }
 
   ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler %d:", this->mouse_id_);
