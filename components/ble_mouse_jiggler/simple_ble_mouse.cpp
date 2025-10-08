@@ -60,6 +60,14 @@ bool SimpleBLEMouse::adv_pairing_mode_ = false;
 bool SimpleBLEMouse::adv_fallback_used_ = false;
 uint32_t SimpleBLEMouse::adv_restart_count_ = 0;
 
+// Zmienne do śledzenia stanu konfiguracji advertising
+static bool adv_data_done = false;
+static bool scan_rsp_done = false;
+
+// Deklaracja funkcji, która jest używana, ale nie została zdefiniowana
+esp_err_t configure_adv_and_scan_rsp(SimpleBLEMouse* mouse, bool pairing_mode);
+
+
 SimpleBLEMouse::SimpleBLEMouse(const std::string& device_name, const std::string& manufacturer, uint8_t battery_level, uint8_t mouse_id, const std::string& pin_code)
     : device_name_(device_name), manufacturer_(manufacturer), battery_level_(battery_level), mouse_id_(mouse_id), connected_(false), pin_code_(pin_code), pairing_mode_(false),
       gatts_if_(ESP_GATT_IF_NONE), conn_id_(0), service_handle_(0), char_handle_(0), app_id_(next_app_id_++) {
@@ -253,6 +261,76 @@ void SimpleBLEMouse::start_pairing_advertising_() {
         ESP_LOGE(TAG, "[ADV] Pairing advertising configuration failed – will not start");
     }
 }
+
+// Nowa, kompletna implementacja funkcji konfigurującej advertising
+esp_err_t configure_adv_and_scan_rsp(SimpleBLEMouse* mouse, bool pairing_mode) {
+    if (!mouse) {
+        ESP_LOGE(TAG, "[ADV] configure_adv_and_scan_rsp called with null mouse");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "[ADV] Configuring advertising for mouse %d (%s), pairing: %s",
+             mouse->getMouseId(), mouse->getDeviceName().c_str(), pairing_mode ? "YES" : "NO");
+
+    // 1. Ustaw parametry advertising
+    pending_adv_params = {};
+    pending_adv_params.adv_int_min       = pairing_mode ? 0x20 : 0x40; // Szybsze w trybie parowania
+    pending_adv_params.adv_int_max       = pairing_mode ? 0x40 : 0x60;
+    pending_adv_params.adv_type          = ADV_TYPE_IND;
+    pending_adv_params.own_addr_type     = BLE_ADDR_TYPE_PUBLIC;
+    pending_adv_params.channel_map       = ADV_CHNL_ALL;
+    pending_adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
+
+    // 2. Skonfiguruj pakiet advertising (ADV_DATA)
+    esp_ble_adv_data_t adv_data = {};
+    adv_data.set_scan_rsp        = false;
+    adv_data.include_name        = false; // Nazwa będzie w scan response
+    adv_data.include_txpower     = true;
+    adv_data.min_interval        = pending_adv_params.adv_int_min;
+    adv_data.max_interval        = pending_adv_params.adv_int_max;
+    adv_data.appearance          = 0x03C2; // Generic Mouse
+    adv_data.flag                = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
+
+    // UUID serwisu HID
+    static uint16_t hid_service_uuid = 0x1812;
+    adv_data.service_uuid_len    = sizeof(hid_service_uuid);
+    adv_data.p_service_uuid      = (uint8_t*)&hid_service_uuid;
+
+    // 3. Skonfiguruj pakiet scan response (SCAN_RSP_DATA)
+    esp_ble_adv_data_t scan_rsp_data = {};
+    scan_rsp_data.set_scan_rsp      = true;
+    scan_rsp_data.include_name      = true; // Pełna nazwa urządzenia tutaj
+    scan_rsp_data.include_txpower   = false;
+    scan_rsp_data.appearance        = 0x03C2;
+
+    // Reset flagów
+    adv_data_done = false;
+    scan_rsp_done = false;
+    awaiting_adv_data_complete = true;
+    pending_adv_start_mouse = mouse;
+
+    // Ustaw nazwę urządzenia
+    esp_ble_gap_set_device_name(mouse->getDeviceName().c_str());
+
+    // Wyślij konfigurację do stosu BLE
+    esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "[ADV] Failed to configure adv data: %s", esp_err_to_name(ret));
+        awaiting_adv_data_complete = false;
+        return ret;
+    }
+
+    ret = esp_ble_gap_config_adv_data(&scan_rsp_data);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "[ADV] Failed to configure scan response data: %s", esp_err_to_name(ret));
+        awaiting_adv_data_complete = false;
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "[ADV] Advertising and scan response configuration submitted successfully.");
+    return ESP_OK;
+}
+
 
 // Modyfikuję gap_event_handler_ aby uwzględnić SCAN_RSP_DATA_SET_COMPLETE
 void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
