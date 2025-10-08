@@ -331,6 +331,38 @@ esp_err_t configure_adv_and_scan_rsp(SimpleBLEMouse* mouse, bool pairing_mode) {
     return ESP_OK;
 }
 
+void SimpleBLEMouse::create_rotation_task_() {
+    static bool task_created = false;
+    if (!task_created) {
+        xTaskCreate(
+            [](void* arg) {
+                for (;;) {
+                    vTaskDelay(pdMS_TO_TICKS(10000)); // Czekaj 10 sekund
+
+                    if (SimpleBLEMouse::advertising_active_ && !SimpleBLEMouse::advertising_queue_.empty()) {
+                        // Przesuń aktualnie ogłaszaną mysz na koniec kolejki
+                        auto* current_mouse = SimpleBLEMouse::advertising_queue_.front();
+                        SimpleBLEMouse::advertising_queue_.erase(SimpleBLEMouse::advertising_queue_.begin());
+                        SimpleBLEMouse::advertising_queue_.push_back(current_mouse);
+
+                        // Zatrzymaj bieżące ogłoszenie i rozpocznij następne
+                        esp_ble_gap_stop_advertising();
+                        vTaskDelay(pdMS_TO_TICKS(100)); // Krótka pauza
+                        SimpleBLEMouse::start_advertising_rotation_();
+                    }
+                }
+            },
+            "ble_mouse_adv_rot", // Nazwa zadania
+            2048,                // Rozmiar stosu
+            nullptr,             // Argument zadania
+            5,                   // Priorytet
+            nullptr              // Uchwyt zadania
+        );
+        task_created = true;
+        ESP_LOGI(TAG, "Created advertising rotation task.");
+    }
+}
+
 
 // Modyfikuję gap_event_handler_ aby uwzględnić SCAN_RSP_DATA_SET_COMPLETE
 void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
