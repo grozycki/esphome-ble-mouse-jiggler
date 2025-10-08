@@ -60,11 +60,11 @@ bool SimpleBLEMouse::adv_pairing_mode_ = false;
 bool SimpleBLEMouse::adv_fallback_used_ = false;
 uint32_t SimpleBLEMouse::adv_restart_count_ = 0;
 
-// Zmienne do śledzenia stanu konfiguracji advertising
+// Variables to track advertising configuration state
 static bool adv_data_done = false;
 static bool scan_rsp_done = false;
 
-// Deklaracja funkcji, która jest używana, ale nie została zdefiniowana
+// Declaration of a function that is used but was not defined
 esp_err_t configure_adv_and_scan_rsp(SimpleBLEMouse* mouse, bool pairing_mode);
 
 
@@ -76,7 +76,7 @@ SimpleBLEMouse::SimpleBLEMouse(const std::string& device_name, const std::string
     app_to_mouse_map_[app_id_] = this;
 
     ESP_LOGI(TAG, "Created mouse instance %d: %s (app_id: %d) %s", mouse_id_, device_name_.c_str(), app_id_,
-             pin_code_.empty() ? "bez PIN" : "z kodem PIN");
+             pin_code_.empty() ? "without PIN" : "with PIN code");
 }
 
 void SimpleBLEMouse::initBluetooth() {
@@ -89,8 +89,8 @@ void SimpleBLEMouse::initBluetooth() {
 
     ESP_LOGI(TAG, "Initializing BLE Mouse using ESPHome's existing BLE stack");
 
-    // ESPHome już zainicjalizowało BLE, więc nie robimy inicjalizacji stosu
-    // Sprawdź czy BLE jest już włączony
+    // ESPHome has already initialized BLE, so we don't initialize the stack
+    // Check if BLE is already enabled
     if (!esp_bluedroid_get_status()) {
         ESP_LOGE(TAG, "ESPHome BLE stack is not initialized - this shouldn't happen!");
         return;
@@ -98,11 +98,11 @@ void SimpleBLEMouse::initBluetooth() {
 
     ESP_LOGI(TAG, "ESPHome BLE stack detected - skipping BLE initialization");
 
-    // Tylko rejestrujemy callback'i - nie inicjalizujemy stosu BLE
+    // We only register callbacks - we don't initialize the BLE stack
     esp_ble_gatts_register_callback(gatts_event_handler_);
     esp_ble_gap_register_callback(gap_event_handler_);
 
-    // Uproszczona konfiguracja bezpieczeństwa BLE dla lepszej kompatybilności
+    // Simplified BLE security configuration for better compatibility
     esp_ble_auth_req_t auth_req = ESP_LE_AUTH_NO_BOND;
     esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
     uint8_t key_size = 16;
@@ -191,9 +191,9 @@ void SimpleBLEMouse::release(uint8_t button) {
 }
 
 void SimpleBLEMouse::start_advertising_() {
-    // Dodaj myszkę do kolejki reklam jeśli nie jest podłączona
+    // Add the mouse to the advertising queue if it's not connected
     if (!connected_) {
-        // Sprawdź czy mysz już jest w kolejce
+        // Check if the mouse is already in the queue
         auto it = std::find(advertising_queue_.begin(), advertising_queue_.end(), this);
         if (it == advertising_queue_.end()) {
             advertising_queue_.push_back(this);
@@ -202,7 +202,7 @@ void SimpleBLEMouse::start_advertising_() {
         }
     }
 
-    // Jeśli żadna reklama nie jest aktywna, rozpocznij rotację
+    // If no advertising is active, start the rotation
     if (!advertising_active_ && !advertising_queue_.empty()) {
         start_advertising_rotation_();
     }
@@ -216,7 +216,7 @@ void SimpleBLEMouse::start_advertising_rotation_() {
         return;
     }
 
-    // Wybierz pierwszą myszkę z kolejki
+    // Select the first mouse from the queue
     currently_advertising_mouse_ = advertising_queue_.front();
     advertising_active_ = true;
 
@@ -225,18 +225,18 @@ void SimpleBLEMouse::start_advertising_rotation_() {
 
     start_single_mouse_advertising_(currently_advertising_mouse_);
 
-    // Zaplanuj rotację do następnej myszy za 10 sekund
-    // W prawdziwej implementacji użylibyśmy timer, tutaj użyjemy task
+    // Schedule rotation to the next mouse in 10 seconds
+    // In a real implementation, we would use a timer, here we use a task
     create_rotation_task_();
 }
 
-// Dodane struktury pomocnicze do kontrolowania startu advertising
+// Added helper structures to control the start of advertising
 static SimpleBLEMouse* pending_adv_start_mouse = nullptr;
 static esp_ble_adv_params_t pending_adv_params = {};
 static bool awaiting_adv_data_complete = false;
 
-// Pomocnicza funkcja budowy advertising data z różnymi poziomami szczegółów
-// (Stara funkcja configure_advertising_data nie jest już używana – pozostawiona wyżej dla referencji)
+// Helper function to build advertising data with different levels of detail
+// (The old configure_advertising_data function is no longer used - left above for reference)
 
 void SimpleBLEMouse::start_single_mouse_advertising_(SimpleBLEMouse* mouse) {
     if (!mouse) return;
@@ -262,7 +262,7 @@ void SimpleBLEMouse::start_pairing_advertising_() {
     }
 }
 
-// Nowa, kompletna implementacja funkcji konfigurującej advertising
+// Final, corrected implementation of the advertising configuration function
 esp_err_t configure_adv_and_scan_rsp(SimpleBLEMouse* mouse, bool pairing_mode) {
     if (!mouse) {
         ESP_LOGE(TAG, "[ADV] configure_adv_and_scan_rsp called with null mouse");
@@ -272,45 +272,47 @@ esp_err_t configure_adv_and_scan_rsp(SimpleBLEMouse* mouse, bool pairing_mode) {
     ESP_LOGI(TAG, "[ADV] Configuring advertising for mouse %d (%s), pairing: %s",
              mouse->getMouseId(), mouse->getDeviceName().c_str(), pairing_mode ? "YES" : "NO");
 
-    // 1. Ustaw parametry advertising
+    // 1. Set advertising parameters
     pending_adv_params = {};
-    pending_adv_params.adv_int_min       = pairing_mode ? 0x20 : 0x40; // Szybsze w trybie parowania
+    pending_adv_params.adv_int_min       = pairing_mode ? 0x20 : 0x40;
     pending_adv_params.adv_int_max       = pairing_mode ? 0x40 : 0x60;
     pending_adv_params.adv_type          = ADV_TYPE_IND;
     pending_adv_params.own_addr_type     = BLE_ADDR_TYPE_PUBLIC;
     pending_adv_params.channel_map       = ADV_CHNL_ALL;
     pending_adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
 
-    // 2. Skonfiguruj pakiet advertising (ADV_DATA) - zminimalizowany
+    // 2. Configure advertising packet (ADV_DATA)
     esp_ble_adv_data_t adv_data = {};
     adv_data.set_scan_rsp        = false;
-    adv_data.include_name        = false; // Nazwa będzie w scan response
-    adv_data.include_txpower     = false; // Oszczędzamy miejsce
-    adv_data.appearance          = 0;     // Oszczędzamy miejsce, wygląd będzie w scan response
+    adv_data.include_name        = false;
+    adv_data.include_txpower     = false;
+    adv_data.min_interval        = 0; // Set to 0 for ESP-IDF to use value from pending_adv_params
+    adv_data.max_interval        = 0; // Set to 0 for ESP-IDF to use value from pending_adv_params
+    adv_data.appearance          = 0;
     adv_data.flag                = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
 
-    // UUID serwisu HID
-    static uint8_t hid_service_uuid[] = {0x12, 0x18}; // UUID: 0x1812
-    adv_data.service_uuid_len    = sizeof(hid_service_uuid);
-    adv_data.p_service_uuid      = hid_service_uuid;
+    // Correct way to set the service UUID
+    static uint16_t service_uuid = 0x1812; // HID Service
+    adv_data.service_uuid_len    = sizeof(service_uuid);
+    adv_data.p_service_uuid      = (uint8_t*)&service_uuid;
 
-    // 3. Skonfiguruj pakiet scan response (SCAN_RSP_DATA)
+    // 3. Configure scan response packet (SCAN_RSP_DATA)
     esp_ble_adv_data_t scan_rsp_data = {};
     scan_rsp_data.set_scan_rsp      = true;
-    scan_rsp_data.include_name      = true; // Pełna nazwa urządzenia tutaj
-    scan_rsp_data.include_txpower   = false;
-    scan_rsp_data.appearance        = 0x03C2;
+    scan_rsp_data.include_name      = true;
+    scan_rsp_data.include_txpower   = true;
+    scan_rsp_data.appearance        = 0x03C2; // Generic Mouse
 
-    // Reset flagów
+    // Reset flags
     adv_data_done = false;
     scan_rsp_done = false;
     awaiting_adv_data_complete = true;
     pending_adv_start_mouse = mouse;
 
-    // Ustaw nazwę urządzenia
+    // Set device name
     esp_ble_gap_set_device_name(mouse->getDeviceName().c_str());
 
-    // Wyślij konfigurację do stosu BLE
+    // Send configuration to the BLE stack
     esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "[ADV] Failed to configure adv data: %s", esp_err_to_name(ret));
@@ -335,26 +337,26 @@ void SimpleBLEMouse::create_rotation_task_() {
         xTaskCreate(
             [](void* arg) {
                 for (;;) {
-                    vTaskDelay(pdMS_TO_TICKS(10000)); // Czekaj 10 sekund
+                    vTaskDelay(pdMS_TO_TICKS(10000)); // Wait 10 seconds
 
                     if (SimpleBLEMouse::advertising_active_ && !SimpleBLEMouse::advertising_queue_.empty()) {
-                        // Przesuń aktualnie ogłaszaną mysz na koniec kolejki
+                        // Move the currently advertising mouse to the end of the queue
                         auto* current_mouse = SimpleBLEMouse::advertising_queue_.front();
                         SimpleBLEMouse::advertising_queue_.erase(SimpleBLEMouse::advertising_queue_.begin());
                         SimpleBLEMouse::advertising_queue_.push_back(current_mouse);
 
-                        // Zatrzymaj bieżące ogłoszenie i rozpocznij następne
+                        // Stop the current advertisement and start the next one
                         esp_ble_gap_stop_advertising();
-                        vTaskDelay(pdMS_TO_TICKS(100)); // Krótka pauza
+                        vTaskDelay(pdMS_TO_TICKS(100)); // Short pause
                         SimpleBLEMouse::start_advertising_rotation_();
                     }
                 }
             },
-            "ble_mouse_adv_rot", // Nazwa zadania
-            2048,                // Rozmiar stosu
-            nullptr,             // Argument zadania
-            5,                   // Priorytet
-            nullptr              // Uchwyt zadania
+            "ble_mouse_adv_rot", // Task name
+            2048,                // Stack size
+            nullptr,             // Task argument
+            5,                   // Priority
+            nullptr              // Task handle
         );
         task_created = true;
         ESP_LOGI(TAG, "Created advertising rotation task.");
@@ -362,7 +364,7 @@ void SimpleBLEMouse::create_rotation_task_() {
 }
 
 
-// Modyfikuję gap_event_handler_ aby uwzględnić SCAN_RSP_DATA_SET_COMPLETE
+// Modify gap_event_handler_ to include SCAN_RSP_DATA_SET_COMPLETE
 void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
     switch (event) {
         case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT: {
@@ -377,7 +379,7 @@ void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_ga
         }
         case ESP_GAP_BLE_PASSKEY_REQ_EVT: {
             ESP_LOGI(TAG, "Passkey request for device");
-            // Znajdź myszkę na podstawie adresu BLE
+            // Find the mouse based on the BLE address
             SimpleBLEMouse* mouse = nullptr;
             for (auto& pair : mice_instances_) {
                 if (pair.second->hasPinCode()) {
@@ -416,7 +418,7 @@ void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_ga
         default:
             break;
     }
-    // Jeśli oba gotowe – start reklam
+    // If both are ready - start advertising
     if (pending_adv_start_mouse && adv_data_done && scan_rsp_done) {
         if (awaiting_adv_data_complete) {
             awaiting_adv_data_complete = false;
@@ -526,21 +528,21 @@ void SimpleBLEMouse::gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_i
 }
 
 void SimpleBLEMouse::setup_hid_service_() {
-    // Tworzenie serwisu HID BLE (UUID: 0x1812)
+    // Create HID BLE service (UUID: 0x1812)
     esp_gatt_srvc_id_t hid_service_id = {};
     hid_service_id.is_primary = true;
     hid_service_id.id.inst_id = 0;
     hid_service_id.id.uuid.len = ESP_UUID_LEN_16;
     hid_service_id.id.uuid.uuid.uuid16 = 0x1812;
 
-    esp_ble_gatts_create_service(gatts_if_, &hid_service_id, 15); // Zwiększono z 8 do 15
+    esp_ble_gatts_create_service(gatts_if_, &hid_service_id, 15); // Increased from 8 to 15
     ESP_LOGI(TAG, "Creating HID service for mouse %d", mouse_id_);
 }
 
 void SimpleBLEMouse::add_hid_characteristics_() {
     ESP_LOGI(TAG, "Adding HID characteristics for mouse %d", mouse_id_);
 
-    // Dodanie charakterystyki HID Information
+    // Add HID Information characteristic
     esp_bt_uuid_t hid_info_uuid = {};
     hid_info_uuid.len = ESP_UUID_LEN_16;
     hid_info_uuid.uuid.uuid16 = 0x2A4A;
@@ -551,7 +553,7 @@ void SimpleBLEMouse::add_hid_characteristics_() {
     hid_info_val.attr_value = hid_info;
     esp_ble_gatts_add_char(service_handle_, &hid_info_uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &hid_info_val, nullptr);
 
-    // Dodanie charakterystyki HID Report Map
+    // Add HID Report Map characteristic
     esp_bt_uuid_t report_map_uuid = {};
     report_map_uuid.len = ESP_UUID_LEN_16;
     report_map_uuid.uuid.uuid16 = 0x2A4B;
@@ -561,7 +563,7 @@ void SimpleBLEMouse::add_hid_characteristics_() {
     report_map_val.attr_value = (uint8_t*)hid_mouse_report_descriptor;
     esp_ble_gatts_add_char(service_handle_, &report_map_uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &report_map_val, nullptr);
 
-    // Dodanie charakterystyki HID Control Point
+    // Add HID Control Point characteristic
     esp_bt_uuid_t control_point_uuid = {};
     control_point_uuid.len = ESP_UUID_LEN_16;
     control_point_uuid.uuid.uuid16 = 0x2A4C;
@@ -572,7 +574,7 @@ void SimpleBLEMouse::add_hid_characteristics_() {
     control_point_val.attr_value = &control_point;
     esp_ble_gatts_add_char(service_handle_, &control_point_uuid, ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_WRITE_NR, &control_point_val, nullptr);
 
-    // Dodanie charakterystyki HID Report
+    // Add HID Report characteristic
     esp_bt_uuid_t report_uuid = {};
     report_uuid.len = ESP_UUID_LEN_16;
     report_uuid.uuid.uuid16 = 0x2A4D;
@@ -583,7 +585,7 @@ void SimpleBLEMouse::add_hid_characteristics_() {
     report_attr_val.attr_value = report_val;
     esp_ble_gatts_add_char(service_handle_, &report_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_NOTIFY, &report_attr_val, nullptr);
 
-    // Dodanie charakterystyki Protocol Mode
+    // Add Protocol Mode characteristic
     esp_bt_uuid_t protocol_mode_uuid = {};
     protocol_mode_uuid.len = ESP_UUID_LEN_16;
     protocol_mode_uuid.uuid.uuid16 = 0x2A4E;
@@ -594,7 +596,7 @@ void SimpleBLEMouse::add_hid_characteristics_() {
     protocol_mode_val.attr_value = &protocol_mode;
     esp_ble_gatts_add_char(service_handle_, &protocol_mode_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE, &protocol_mode_val, nullptr);
 
-    // Teraz dodaj Battery Service (wymagany dla HID)
+    // Now add Battery Service (required for HID)
     setup_battery_service_();
 
     ESP_LOGI(TAG, "HID characteristics added for mouse %d", mouse_id_);
@@ -603,7 +605,7 @@ void SimpleBLEMouse::add_hid_characteristics_() {
 void SimpleBLEMouse::setup_battery_service_() {
     ESP_LOGI(TAG, "Adding Battery Service for mouse %d", mouse_id_);
 
-    // Tworzenie serwisu Battery BLE (UUID: 0x180F)
+    // Create Battery BLE service (UUID: 0x180F)
     esp_gatt_srvc_id_t battery_service_id = {};
     battery_service_id.is_primary = true;
     battery_service_id.id.inst_id = 1; // Different instance ID from HID service
@@ -620,7 +622,7 @@ void SimpleBLEMouse::send_hid_report_(uint8_t* data, size_t length) {
         return;
     }
 
-    // Wyślij HID report przez charakterystykę HID Report (0x2A4D)
+    // Send HID report via HID Report characteristic (0x2A4D)
     esp_err_t ret = esp_ble_gatts_send_indicate(gatts_if_, conn_id_, char_handle_, length, data, false);
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Failed to send HID report for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
@@ -672,26 +674,26 @@ void SimpleBLEMouse::disablePairingMode() {
 }
 
 void SimpleBLEMouse::advertising_service_loop() {
-    if (!awaiting_adv_data_complete) return; // nie oczekujemy – nic do zrobienia
+    if (!awaiting_adv_data_complete) return; // not waiting - nothing to do
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
     uint32_t elapsed = now_ms - adv_request_start_ms_;
 
-    // Pierwszy fallback po 5000 ms – rezygnujemy ze scan response, zostawiamy tylko adv z krótką nazwą
+    // First fallback after 5000 ms - give up on scan response, leave only adv with a short name
     if (elapsed > 5000 && !adv_fallback_used_) {
         ESP_LOGW(TAG, "[ADV][WATCHDOG] Timeout %ums without both data sets. Applying fallback: only ADV, short name.", elapsed);
-        awaiting_adv_data_complete = true; // ponownie czekamy na ADV data
+        awaiting_adv_data_complete = true; // wait for ADV data again
         adv_fallback_used_ = true;
         adv_data_done = false;
-        scan_rsp_done = true; // uznaj scan response za gotowy (nie będziemy go konfigurować)
+        scan_rsp_done = true; // consider scan response as ready (we won't configure it)
 
-        // Minimalny pakiet ADV z krótką nazwą (ESP32MJ) – mieści się w budżecie
+        // Minimal ADV packet with a short name (ESP32MJ) - fits within the budget
         const char *short_name = "ESP32MJ";
         esp_ble_gap_set_device_name(short_name);
         esp_ble_adv_data_t adv_data = {};
         adv_data.set_scan_rsp = false;
         adv_data.include_name = true;
         adv_data.include_txpower = false;
-        adv_data.appearance = 0; // pomijamy appearance aby zaoszczędzić bajty
+        adv_data.appearance = 0; // skip appearance to save bytes
         adv_data.service_uuid_len = 0;
         adv_data.p_service_uuid = nullptr;
         adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
@@ -712,10 +714,10 @@ void SimpleBLEMouse::advertising_service_loop() {
         return;
     }
 
-    // Drugi fallback po 9000 ms – całkowicie minimalny pakiet, jeśli poprzedni też nie wystartował
+    // Second fallback after 9000 ms - completely minimal packet if the previous one also failed to start
     if (elapsed > 9000 && adv_fallback_used_ && awaiting_adv_data_complete) {
         ESP_LOGW(TAG, "[ADV][WATCHDOG] Second timeout %ums. Forcing immediate start with raw params. heap=%u", elapsed, (unsigned)esp_get_free_heap_size());
-        awaiting_adv_data_complete = false; // nie czekamy już
+        awaiting_adv_data_complete = false; // don't wait anymore
         esp_err_t ret = esp_ble_gap_start_advertising(&pending_adv_params);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "[ADV][FALLBACK2] Forced start failed: %s (heap=%u)", esp_err_to_name(ret), (unsigned)esp_get_free_heap_size());

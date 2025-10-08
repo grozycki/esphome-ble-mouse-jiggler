@@ -89,7 +89,7 @@ private:
     static int adv_attempt_;
     static bool adv_pairing_mode_;
     static bool adv_fallback_used_;
-    static uint32_t adv_restart_count_; // licznik udanych startów advertising
+    static uint32_t adv_restart_count_; // counter of successful advertising starts
 
     static void gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param);
     static void gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);

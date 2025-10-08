@@ -9,7 +9,7 @@ from esphome.const import (
     CONF_INTERVAL,
 )
 
-DEPENDENCIES = ["esp32"]  # Usuwam esp32_ble - może powoduje konflikty
+DEPENDENCIES = ["esp32"]  # Removing esp32_ble - it might cause conflicts
 AUTO_LOAD = ["esp32"]
 CODEOWNERS = ["@esphome/core"]
 
