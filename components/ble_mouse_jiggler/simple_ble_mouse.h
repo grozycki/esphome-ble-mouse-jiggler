@@ -37,6 +37,11 @@ public:
     void setPinCode(const std::string& pin_code) { pin_code_ = pin_code; }
     bool hasPinCode() const { return !pin_code_.empty(); }
 
+    // Pairing mode control
+    void enablePairingMode(uint32_t duration_ms = 120000); // 2 minutes default
+    void disablePairingMode();
+    bool isPairingMode() const { return pairing_mode_; }
+
     // Static methods for managing multiple mice
     static void initBluetooth();
     static void deinitBluetooth();
@@ -50,6 +55,7 @@ private:
     uint8_t mouse_id_;
     bool connected_;
     std::string pin_code_;
+    bool pairing_mode_; // New state variable for pairing mode
 
     // Instance-specific BLE handles
     uint16_t gatts_if_;

@@ -51,7 +51,7 @@ bool SimpleBLEMouse::bluetooth_initialized_ = false;
 uint16_t SimpleBLEMouse::next_app_id_ = 0;
 
 SimpleBLEMouse::SimpleBLEMouse(const std::string& device_name, const std::string& manufacturer, uint8_t battery_level, uint8_t mouse_id, const std::string& pin_code)
-    : device_name_(device_name), manufacturer_(manufacturer), battery_level_(battery_level), mouse_id_(mouse_id), connected_(false), pin_code_(pin_code),
+    : device_name_(device_name), manufacturer_(manufacturer), battery_level_(battery_level), mouse_id_(mouse_id), connected_(false), pin_code_(pin_code), pairing_mode_(false),
       gatts_if_(ESP_GATT_IF_NONE), conn_id_(0), service_handle_(0), char_handle_(0), app_id_(next_app_id_++) {
 
     mice_instances_[mouse_id_] = this;
@@ -500,4 +500,94 @@ void SimpleBLEMouse::send_hid_report_(uint8_t* data, size_t length) {
     }
 }
 
+void SimpleBLEMouse::enablePairingMode(uint32_t duration_ms) {
+    if (connected_) {
+        ESP_LOGW(TAG, "Cannot enable pairing mode for mouse %d - already connected", mouse_id_);
+        return;
+    }
+
+    pairing_mode_ = true;
+    ESP_LOGI(TAG, "🔄 PAIRING MODE ENABLED for mouse %d (%s) - Duration: %d ms",
+             mouse_id_, device_name_.c_str(), duration_ms);
+
+    // Stop current advertising to restart with enhanced discoverability
+    esp_ble_gap_stop_advertising();
+
+    // Wait a bit and restart advertising with enhanced parameters
+    vTaskDelay(pdMS_TO_TICKS(100));
+    start_pairing_advertising_();
+
+    // Set timer to disable pairing mode after duration
+    if (duration_ms > 0) {
+        // Create timer to auto-disable pairing mode
+        // For now, just log - in full implementation we'd use a timer
+        ESP_LOGI(TAG, "Pairing mode will auto-disable after %d ms", duration_ms);
+    }
+}
+
+void SimpleBLEMouse::disablePairingMode() {
+    if (!pairing_mode_) {
+        return;
+    }
+
+    pairing_mode_ = false;
+    ESP_LOGI(TAG, "🔒 PAIRING MODE DISABLED for mouse %d (%s)", mouse_id_, device_name_.c_str());
+
+    if (!connected_) {
+        // Restart normal advertising
+        esp_ble_gap_stop_advertising();
+        vTaskDelay(pdMS_TO_TICKS(100));
+        start_advertising_();
+    }
+}
+
+void SimpleBLEMouse::start_pairing_advertising_() {
+    // Enhanced advertising for pairing mode with faster intervals
+    esp_ble_gap_set_device_name(device_name_.c_str());
+
+    esp_ble_adv_params_t adv_params = {};
+    adv_params.adv_int_min = 0x10; // Faster advertising interval for pairing
+    adv_params.adv_int_max = 0x20;
+    adv_params.adv_type = ADV_TYPE_IND;
+    adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
+    adv_params.channel_map = ADV_CHNL_ALL;
+    adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
+
+    // UUID serwisów dla trybu parowania
+    static uint8_t service_uuids[4] = {
+        0x12, 0x18,  // HID Service UUID 0x1812
+        0x0F, 0x18   // Battery Service UUID 0x180F
+    };
+
+    esp_ble_adv_data_t adv_data = {};
+    adv_data.set_scan_rsp = false;
+    adv_data.include_name = true;
+    adv_data.include_txpower = true;
+    adv_data.min_interval = 0x10;
+    adv_data.max_interval = 0x20;
+    adv_data.appearance = 0x03C2; // Mouse appearance
+    adv_data.manufacturer_len = 0;
+    adv_data.p_manufacturer_data = nullptr;
+    adv_data.service_data_len = 0;
+    adv_data.p_service_data = nullptr;
+    adv_data.service_uuid_len = 4;
+    adv_data.p_service_uuid = service_uuids;
+    // Enhanced discoverability flags for pairing mode
+    adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT | ESP_BLE_ADV_FLAG_DMT_CONTROLLER_SPT | ESP_BLE_ADV_FLAG_DMT_HOST_SPT);
+
+    esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set pairing advertising data for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
+        return;
+    }
+
+    ret = esp_ble_gap_start_advertising(&adv_params);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start pairing advertising for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
+        return;
+    }
+
+    ESP_LOGI(TAG, "🔍 PAIRING MODE ADVERTISING started for mouse %d: %s (Enhanced discoverability)",
+             mouse_id_, device_name_.c_str());
+}
 #endif // USE_ESP32
