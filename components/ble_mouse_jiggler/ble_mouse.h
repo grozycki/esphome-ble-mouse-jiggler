@@ -18,7 +18,7 @@ class BleMouseJiggler : public Component {
   void setup() override;
   void loop() override;
   void dump_config() override;
-  float get_setup_priority() const override { return setup_priority::AFTER_BLUETOOTH; }
+  float get_setup_priority() const override { return setup_priority::BLUETOOTH - 1.0f; } // Uruchom po BLUETOOTH ale przed innymi komponentami
 
   void set_device_name(const std::string &name) { this->device_name_ = name; }
   void set_manufacturer(const std::string &manufacturer) { this->manufacturer_ = manufacturer; }
@@ -55,6 +55,7 @@ template<typename... Ts> class StartJigglingAction : public Action<Ts...> {
  public:
   StartJigglingAction(BleMouseJiggler *parent) : parent_(parent) {}
 
+  void set_parent(BleMouseJiggler *parent) { this->parent_ = parent; }
   void play(Ts... x) override { this->parent_->start_jiggling(); }
 
  protected:
@@ -65,6 +66,7 @@ template<typename... Ts> class StopJigglingAction : public Action<Ts...> {
  public:
   StopJigglingAction(BleMouseJiggler *parent) : parent_(parent) {}
 
+  void set_parent(BleMouseJiggler *parent) { this->parent_ = parent; }
   void play(Ts... x) override { this->parent_->stop_jiggling(); }
 
  protected:
@@ -75,6 +77,7 @@ template<typename... Ts> class JiggleOnceAction : public Action<Ts...> {
  public:
   JiggleOnceAction(BleMouseJiggler *parent) : parent_(parent) {}
 
+  void set_parent(BleMouseJiggler *parent) { this->parent_ = parent; }
   void play(Ts... x) override { this->parent_->jiggle_once(); }
 
  protected:
