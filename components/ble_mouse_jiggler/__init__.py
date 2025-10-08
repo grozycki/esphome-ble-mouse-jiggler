@@ -9,8 +9,9 @@ from esphome.const import (
     CONF_INTERVAL,
 )
 
-DEPENDENCIES = ["esp32"]
+DEPENDENCIES = ["esp32", "esp32_ble"]  # Dodaję zależność od esp32_ble
 AUTO_LOAD = ["esp32"]
+CODEOWNERS = ["@esphome/core"]
 
 # Define custom configuration keys not available in esphome.const
 CONF_MANUFACTURER = "manufacturer"

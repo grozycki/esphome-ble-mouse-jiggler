@@ -73,48 +73,24 @@ void SimpleBLEMouse::initBluetooth() {
 
     esp_err_t ret;
 
-    ESP_LOGI(TAG, "Initializing Bluetooth for multiple mice");
+    ESP_LOGI(TAG, "Initializing BLE Mouse using ESPHome's existing BLE stack");
 
-    // Initialize NVS
-    ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
-    // Release classic BT memory
-    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
-
-    // Initialize BT controller
-    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    ret = esp_bt_controller_init(&bt_cfg);
-    if (ret) {
-        ESP_LOGE(TAG, "Initialize controller failed: %s", esp_err_to_name(ret));
+    // ESPHome już zainicjalizowało BLE, więc nie robimy inicjalizacji stosu
+    // Sprawdź czy BLE jest już włączony
+    if (!esp_bluedroid_get_status()) {
+        ESP_LOGE(TAG, "ESPHome BLE stack is not initialized - this shouldn't happen!");
         return;
     }
 
-    ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
-    if (ret) {
-        ESP_LOGE(TAG, "Enable controller failed: %s", esp_err_to_name(ret));
-        return;
-    }
+    ESP_LOGI(TAG, "ESPHome BLE stack detected - skipping BLE initialization");
 
-    ret = esp_bluedroid_init();
-    if (ret) {
-        ESP_LOGE(TAG, "Init bluetooth failed: %s", esp_err_to_name(ret));
-        return;
-    }
-
-    ret = esp_bluedroid_enable();
-    if (ret) {
-        ESP_LOGE(TAG, "Enable bluetooth failed: %s", esp_err_to_name(ret));
-        return;
-    }
+    // Tylko rejestrujemy callback'i - nie inicjalizujemy stosu BLE
+    esp_ble_gatts_register_callback(gatts_event_handler_);
+    esp_ble_gap_register_callback(gap_event_handler_);
 
     // Uproszczona konfiguracja bezpieczeństwa BLE dla lepszej kompatybilności
-    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_NO_BOND; // Brak bonding dla lepszej kompatybilności
-    esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE; // Brak I/O capabilities dla prostszego parowania
+    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_NO_BOND;
+    esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
     uint8_t key_size = 16;
     uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
     uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
@@ -125,12 +101,8 @@ void SimpleBLEMouse::initBluetooth() {
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t));
 
-    // Register callbacks
-    esp_ble_gatts_register_callback(gatts_event_handler_);
-    esp_ble_gap_register_callback(gap_event_handler_);
-
     bluetooth_initialized_ = true;
-    ESP_LOGI(TAG, "Bluetooth initialized successfully with simplified security");
+    ESP_LOGI(TAG, "BLE Mouse initialized successfully using existing ESPHome BLE stack");
 }
 
 void SimpleBLEMouse::deinitBluetooth() {
