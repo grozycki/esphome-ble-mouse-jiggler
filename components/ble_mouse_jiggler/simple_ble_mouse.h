@@ -69,6 +69,7 @@ private:
     void setup_battery_service_();
     void send_hid_report_(uint8_t* data, size_t length);
     void start_advertising_();
+    void start_pairing_advertising_(); // Added missing declaration
 
     // Static management
     static std::map<uint8_t, SimpleBLEMouse*> mice_instances_;
