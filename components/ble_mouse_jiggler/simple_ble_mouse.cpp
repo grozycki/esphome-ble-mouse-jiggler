@@ -275,9 +275,50 @@ void SimpleBLEMouse::gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_i
 }
 
 void SimpleBLEMouse::setup_hid_service_() {
-    // This is a simplified version - in a full implementation
-    // we would need to create proper HID service and characteristics
-    ESP_LOGI(TAG, "HID service setup completed for mouse %d", mouse_id_);
+    // Tworzenie serwisu HID BLE (UUID: 0x1812)
+    esp_gatt_srvc_id_t hid_service_id = {};
+    hid_service_id.is_primary = true;
+    hid_service_id.id.inst_id = 0;
+    hid_service_id.id.uuid.len = ESP_UUID_LEN_16;
+    hid_service_id.id.uuid.uuid.uuid16 = 0x1812;
+
+    esp_ble_gatts_create_service(gatts_if_, &hid_service_id, 8);
+
+    // Dodanie charakterystyki HID Information
+    esp_bt_uuid_t hid_info_uuid = {};
+    hid_info_uuid.len = ESP_UUID_LEN_16;
+    hid_info_uuid.uuid.uuid16 = 0x2A4A;
+    uint8_t hid_info[4] = {0x01, 0x01, 0x00, 0x02}; // HID info: ver 1.1, country code 0, flags 2
+    esp_ble_gatts_add_char(service_handle_, &hid_info_uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, hid_info, nullptr);
+
+    // Dodanie charakterystyki HID Report Map
+    esp_bt_uuid_t report_map_uuid = {};
+    report_map_uuid.len = ESP_UUID_LEN_16;
+    report_map_uuid.uuid.uuid16 = 0x2A4B;
+    esp_ble_gatts_add_char(service_handle_, &report_map_uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, (uint8_t*)hid_mouse_report_descriptor, sizeof(hid_mouse_report_descriptor));
+
+    // Dodanie charakterystyki HID Control Point
+    esp_bt_uuid_t control_point_uuid = {};
+    control_point_uuid.len = ESP_UUID_LEN_16;
+    control_point_uuid.uuid.uuid16 = 0x2A4C;
+    uint8_t control_point = 0;
+    esp_ble_gatts_add_char(service_handle_, &control_point_uuid, ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_WRITE_NR, &control_point, nullptr);
+
+    // Dodanie charakterystyki HID Report
+    esp_bt_uuid_t report_uuid = {};
+    report_uuid.len = ESP_UUID_LEN_16;
+    report_uuid.uuid.uuid16 = 0x2A4D;
+    uint8_t report_val[4] = {0, 0, 0, 0};
+    esp_ble_gatts_add_char(service_handle_, &report_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_NOTIFY, report_val, nullptr);
+
+    // Dodanie charakterystyki Protocol Mode
+    esp_bt_uuid_t protocol_mode_uuid = {};
+    protocol_mode_uuid.len = ESP_UUID_LEN_16;
+    protocol_mode_uuid.uuid.uuid16 = 0x2A4E;
+    uint8_t protocol_mode = 1; // Report Protocol
+    esp_ble_gatts_add_char(service_handle_, &protocol_mode_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE, &protocol_mode, nullptr);
+
+    ESP_LOGI(TAG, "HID BLE service i charakterystyki utworzone dla myszy %d", mouse_id_);
 }
 
 void SimpleBLEMouse::send_hid_report_(uint8_t* data, size_t length) {
