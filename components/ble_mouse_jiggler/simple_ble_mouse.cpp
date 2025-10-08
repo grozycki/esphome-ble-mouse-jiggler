@@ -6,6 +6,7 @@
 #include <algorithm>
 #include "esp_log.h"
 #include <string.h>
+#include "esp_system.h"
 
 static const char* TAG = "SimpleBLEMouse";
 
@@ -53,6 +54,11 @@ uint16_t SimpleBLEMouse::next_app_id_ = 0;
 SimpleBLEMouse* SimpleBLEMouse::currently_advertising_mouse_ = nullptr;
 std::vector<SimpleBLEMouse*> SimpleBLEMouse::advertising_queue_;
 bool SimpleBLEMouse::advertising_active_ = false;
+uint32_t SimpleBLEMouse::adv_request_start_ms_ = 0;
+int SimpleBLEMouse::adv_attempt_ = 0;
+bool SimpleBLEMouse::adv_pairing_mode_ = false;
+bool SimpleBLEMouse::adv_fallback_used_ = false;
+uint32_t SimpleBLEMouse::adv_restart_count_ = 0;
 
 SimpleBLEMouse::SimpleBLEMouse(const std::string& device_name, const std::string& manufacturer, uint8_t battery_level, uint8_t mouse_id, const std::string& pin_code)
     : device_name_(device_name), manufacturer_(manufacturer), battery_level_(battery_level), mouse_id_(mouse_id), connected_(false), pin_code_(pin_code), pairing_mode_(false),
@@ -216,101 +222,51 @@ void SimpleBLEMouse::start_advertising_rotation_() {
     create_rotation_task_();
 }
 
+// Dodane struktury pomocnicze do kontrolowania startu advertising
+static SimpleBLEMouse* pending_adv_start_mouse = nullptr;
+static esp_ble_adv_params_t pending_adv_params = {};
+static bool awaiting_adv_data_complete = false;
+
+// Pomocnicza funkcja budowy advertising data z różnymi poziomami szczegółów
+// (Stara funkcja configure_advertising_data nie jest już używana – pozostawiona wyżej dla referencji)
+
 void SimpleBLEMouse::start_single_mouse_advertising_(SimpleBLEMouse* mouse) {
     if (!mouse) return;
-
-    ESP_LOGI(TAG, "🔄 Starting ULTRA SIMPLE advertising for mouse %d: %s", mouse->mouse_id_, mouse->device_name_.c_str());
-
-    // Ustaw nazwę urządzenia
-    esp_ble_gap_set_device_name(mouse->device_name_.c_str());
-
-    esp_ble_adv_params_t adv_params = {};
-    adv_params.adv_int_min = 0x20; // 20ms
-    adv_params.adv_int_max = 0x40; // 40ms
-    adv_params.adv_type = ADV_TYPE_IND;
-    adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
-    adv_params.channel_map = ADV_CHNL_ALL;
-    adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
-
-    // RADYKALNA NAPRAWKA: Całkowicie pomiń esp_ble_gap_config_adv_data()
-    // Użyj tylko podstawowe advertising bez metadanych
-    ESP_LOGI(TAG, "🚀 SKIPPING advertising data configuration - using basic advertising only");
-    ESP_LOGI(TAG, "   Device will be visible as: %s", mouse->device_name_.c_str());
-
-    esp_err_t ret = esp_ble_gap_start_advertising(&adv_params);
+    ESP_LOGI(TAG, "[ADV] Starting advertising sequence for mouse %d", mouse->mouse_id_);
+    adv_pairing_mode_ = false;
+    adv_request_start_ms_ = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    adv_fallback_used_ = false;
+    adv_attempt_ = 0;
+    esp_err_t ret = configure_adv_and_scan_rsp(mouse, false);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start basic advertising for mouse %d: %s", mouse->mouse_id_, esp_err_to_name(ret));
-        ESP_LOGI(TAG, "🔧 TRYING with even simpler advertising parameters...");
-
-        // OSTATECZNY FALLBACK: Najprostsze możliwe parametry
-        esp_ble_adv_params_t minimal_adv_params = {};
-        minimal_adv_params.adv_int_min = 0x100; // Wolniejsze advertising
-        minimal_adv_params.adv_int_max = 0x200;
-        minimal_adv_params.adv_type = ADV_TYPE_IND;
-        minimal_adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
-        minimal_adv_params.channel_map = ADV_CHNL_ALL;
-        minimal_adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
-
-        ret = esp_ble_gap_start_advertising(&minimal_adv_params);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "MINIMAL ADVERTISING ALSO FAILED for mouse %d: %s", mouse->mouse_id_, esp_err_to_name(ret));
-            return;
-        }
-        ESP_LOGI(TAG, "✅ MINIMAL advertising started successfully for mouse %d", mouse->mouse_id_);
-    } else {
-        ESP_LOGI(TAG, "✅ BASIC advertising started successfully for mouse %d", mouse->mouse_id_);
+        ESP_LOGE(TAG, "[ADV] Aborting advertising start due to configuration failure");
     }
-
-    ESP_LOGI(TAG, "📡 Device '%s' should now be discoverable in Bluetooth settings", mouse->device_name_.c_str());
 }
 
-void SimpleBLEMouse::create_rotation_task_() {
-    // Tworzymy zadanie FreeRTOS dla rotacji reklam
-    xTaskCreate([](void* param) {
-        while (true) {
-            vTaskDelay(pdMS_TO_TICKS(10000)); // Czekaj 10 sekund
-
-            if (!advertising_active_ || advertising_queue_.empty()) {
-                break; // Zakończ zadanie jeśli reklama nieaktywna
-            }
-
-            // Przesuń pierwszą myszkę na koniec kolejki
-            if (!advertising_queue_.empty()) {
-                SimpleBLEMouse* current = advertising_queue_.front();
-                advertising_queue_.erase(advertising_queue_.begin());
-
-                // Jeśli mysz nadal nie jest podłączona, dodaj ją na koniec
-                if (!current->connected_) {
-                    advertising_queue_.push_back(current);
-                }
-            }
-
-            // Zatrzymaj obecną reklamę
-            esp_ble_gap_stop_advertising();
-            vTaskDelay(pdMS_TO_TICKS(100));
-
-            // Rozpocznij reklamę następnej myszy
-            if (!advertising_queue_.empty()) {
-                currently_advertising_mouse_ = advertising_queue_.front();
-                start_single_mouse_advertising_(currently_advertising_mouse_);
-                ESP_LOGI(TAG, "🔄 Rotated to mouse %d: %s",
-                         currently_advertising_mouse_->mouse_id_,
-                         currently_advertising_mouse_->device_name_.c_str());
-            } else {
-                advertising_active_ = false;
-                currently_advertising_mouse_ = nullptr;
-                break;
-            }
-        }
-        vTaskDelete(nullptr); // Usuń zadanie
-    }, "ble_adv_rotation", 2048, nullptr, 5, nullptr);
+void SimpleBLEMouse::start_pairing_advertising_() {
+    ESP_LOGI(TAG, "[ADV] Starting pairing advertising sequence for mouse %d", mouse_id_);
+    adv_pairing_mode_ = true;
+    adv_attempt_ = 0;
+    adv_request_start_ms_ = (uint32_t) (esp_timer_get_time() / 1000ULL);
+    esp_err_t ret = configure_adv_and_scan_rsp(this, true);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "[ADV] Pairing advertising configuration failed – will not start");
+    }
 }
 
+// Modyfikuję gap_event_handler_ aby uwzględnić SCAN_RSP_DATA_SET_COMPLETE
 void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
     switch (event) {
-        case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
-            ESP_LOGD(TAG, "Advertising data set complete");
+        case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT: {
+            ESP_LOGI(TAG, "[ADV] ADV_DATA_SET_COMPLETE");
+            adv_data_done = true;
             break;
+        }
+        case ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT: {
+            ESP_LOGI(TAG, "[ADV] SCAN_RSP_DATA_SET_COMPLETE");
+            scan_rsp_done = true;
+            break;
+        }
         case ESP_GAP_BLE_PASSKEY_REQ_EVT: {
             ESP_LOGI(TAG, "Passkey request for device");
             // Znajdź myszkę na podstawie adresu BLE
@@ -351,6 +307,20 @@ void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_ga
         }
         default:
             break;
+    }
+    // Jeśli oba gotowe – start reklam
+    if (pending_adv_start_mouse && adv_data_done && scan_rsp_done) {
+        if (awaiting_adv_data_complete) {
+            awaiting_adv_data_complete = false;
+            ESP_LOGI(TAG, "[ADV] Both adv & scan response configured – starting advertising... heap=%u", (unsigned)esp_get_free_heap_size());
+            esp_err_t ret = esp_ble_gap_start_advertising(&pending_adv_params);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "[ADV] Failed to start advertising: %s (heap=%u)", esp_err_to_name(ret), (unsigned)esp_get_free_heap_size());
+            } else {
+                adv_restart_count_++;
+                ESP_LOGI(TAG, "📡 Advertising ACTIVE for mouse %d (starts=%u, heap=%u)", pending_adv_start_mouse->mouse_id_, adv_restart_count_, (unsigned)esp_get_free_heap_size());
+            }
+        }
     }
 }
 
@@ -593,34 +563,59 @@ void SimpleBLEMouse::disablePairingMode() {
     }
 }
 
-void SimpleBLEMouse::start_pairing_advertising_() {
-    ESP_LOGI(TAG, "🔄 Starting ULTRA SIMPLE pairing advertising for mouse %d", mouse_id_);
+void SimpleBLEMouse::advertising_service_loop() {
+    if (!awaiting_adv_data_complete) return; // nie oczekujemy – nic do zrobienia
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    uint32_t elapsed = now_ms - adv_request_start_ms_;
 
-    // Ustaw nazwę urządzenia
-    esp_ble_gap_set_device_name(device_name_.c_str());
+    // Pierwszy fallback po 5000 ms – rezygnujemy ze scan response, zostawiamy tylko adv z krótką nazwą
+    if (elapsed > 5000 && !adv_fallback_used_) {
+        ESP_LOGW(TAG, "[ADV][WATCHDOG] Timeout %ums without both data sets. Applying fallback: only ADV, short name.", elapsed);
+        awaiting_adv_data_complete = true; // ponownie czekamy na ADV data
+        adv_fallback_used_ = true;
+        adv_data_done = false;
+        scan_rsp_done = true; // uznaj scan response za gotowy (nie będziemy go konfigurować)
 
-    esp_ble_adv_params_t adv_params = {};
-    adv_params.adv_int_min = 0x20; // Szybsze advertising dla parowania
-    adv_params.adv_int_max = 0x40;
-    adv_params.adv_type = ADV_TYPE_IND;
-    adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
-    adv_params.channel_map = ADV_CHNL_ALL;
-    adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
-
-    // RADYKALNA NAPRAWKA: Całkowicie pomiń esp_ble_gap_config_adv_data() także w trybie parowania
-    ESP_LOGI(TAG, "🚀 SKIPPING pairing advertising data configuration - using basic advertising only");
-    ESP_LOGI(TAG, "   Device will be visible as: %s (PAIRING MODE)", device_name_.c_str());
-
-    esp_err_t ret = esp_ble_gap_start_advertising(&adv_params);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start basic pairing advertising for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
-        ESP_LOGI(TAG, "🔧 FALLBACK: Using start_advertising_() instead...");
-        // Ostateczny fallback - użyj standardowej funkcji advertising
-        start_advertising_();
+        // Minimalny pakiet ADV z krótką nazwą (ESP32MJ) – mieści się w budżecie
+        const char *short_name = "ESP32MJ";
+        esp_ble_gap_set_device_name(short_name);
+        esp_ble_adv_data_t adv_data = {};
+        adv_data.set_scan_rsp = false;
+        adv_data.include_name = true;
+        adv_data.include_txpower = false;
+        adv_data.appearance = 0; // pomijamy appearance aby zaoszczędzić bajty
+        adv_data.service_uuid_len = 0;
+        adv_data.p_service_uuid = nullptr;
+        adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
+        esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "[ADV][FALLBACK1] Failed to config minimal adv: %s", esp_err_to_name(ret));
+        } else {
+            pending_adv_params = {};
+            pending_adv_params.adv_int_min = 0x60;
+            pending_adv_params.adv_int_max = 0x80;
+            pending_adv_params.adv_type = ADV_TYPE_IND;
+            pending_adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
+            pending_adv_params.channel_map = ADV_CHNL_ALL;
+            pending_adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
+            ESP_LOGI(TAG, "[ADV][FALLBACK1] Minimal adv config submitted. Waiting for ADV_DATA_SET_COMPLETE.");
+        }
+        ESP_LOGI(TAG, "[ADV][FALLBACK1] Free heap: %u", (unsigned) esp_get_free_heap_size());
         return;
     }
 
-    ESP_LOGI(TAG, "✅ ULTRA SIMPLE PAIRING ADVERTISING started for mouse %d: %s", mouse_id_, device_name_.c_str());
-    ESP_LOGI(TAG, "📡 Device should be highly discoverable for pairing now!");
+    // Drugi fallback po 9000 ms – całkowicie minimalny pakiet, jeśli poprzedni też nie wystartował
+    if (elapsed > 9000 && adv_fallback_used_ && awaiting_adv_data_complete) {
+        ESP_LOGW(TAG, "[ADV][WATCHDOG] Second timeout %ums. Forcing immediate start with raw params. heap=%u", elapsed, (unsigned)esp_get_free_heap_size());
+        awaiting_adv_data_complete = false; // nie czekamy już
+        esp_err_t ret = esp_ble_gap_start_advertising(&pending_adv_params);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "[ADV][FALLBACK2] Forced start failed: %s (heap=%u)", esp_err_to_name(ret), (unsigned)esp_get_free_heap_size());
+        } else {
+            adv_restart_count_++;
+            ESP_LOGI(TAG, "[ADV][FALLBACK2] Forced advertising start issued. starts=%u heap=%u", adv_restart_count_, (unsigned)esp_get_free_heap_size());
+        }
+        ESP_LOGI(TAG, "[ADV][FALLBACK2] Free heap: %u", (unsigned) esp_get_free_heap_size());
+    }
 }
 #endif // USE_ESP32
