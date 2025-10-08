@@ -281,20 +281,18 @@ esp_err_t configure_adv_and_scan_rsp(SimpleBLEMouse* mouse, bool pairing_mode) {
     pending_adv_params.channel_map       = ADV_CHNL_ALL;
     pending_adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
 
-    // 2. Skonfiguruj pakiet advertising (ADV_DATA)
+    // 2. Skonfiguruj pakiet advertising (ADV_DATA) - zminimalizowany
     esp_ble_adv_data_t adv_data = {};
     adv_data.set_scan_rsp        = false;
     adv_data.include_name        = false; // Nazwa będzie w scan response
-    adv_data.include_txpower     = true;
-    adv_data.min_interval        = pending_adv_params.adv_int_min;
-    adv_data.max_interval        = pending_adv_params.adv_int_max;
-    adv_data.appearance          = 0x03C2; // Generic Mouse
+    adv_data.include_txpower     = false; // Oszczędzamy miejsce
+    adv_data.appearance          = 0;     // Oszczędzamy miejsce, wygląd będzie w scan response
     adv_data.flag                = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
 
     // UUID serwisu HID
-    static uint16_t hid_service_uuid = 0x1812;
+    static uint8_t hid_service_uuid[] = {0x12, 0x18}; // UUID: 0x1812
     adv_data.service_uuid_len    = sizeof(hid_service_uuid);
-    adv_data.p_service_uuid      = (uint8_t*)&hid_service_uuid;
+    adv_data.p_service_uuid      = hid_service_uuid;
 
     // 3. Skonfiguruj pakiet scan response (SCAN_RSP_DATA)
     esp_ble_adv_data_t scan_rsp_data = {};
