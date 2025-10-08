@@ -206,6 +206,9 @@ void SimpleBLEMouse::release(uint8_t button) {
 }
 
 void SimpleBLEMouse::start_advertising_() {
+    // Najpierw ustaw nazwę urządzenia
+    esp_ble_gap_set_device_name(device_name_.c_str());
+
     esp_ble_adv_params_t adv_params = {};
     adv_params.adv_int_min = 0x20;
     adv_params.adv_int_max = 0x40;
@@ -214,29 +217,41 @@ void SimpleBLEMouse::start_advertising_() {
     adv_params.channel_map = ADV_CHNL_ALL;
     adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
 
-    // Dodaj UUID serwisu HID do reklamy
-    static uint8_t service_uuid[2] = {0x12, 0x18}; // HID Service UUID 0x1812 w little endian
+    // Dodaj UUID serwisów HID i Battery do reklamy
+    static uint8_t service_uuids[4] = {
+        0x12, 0x18,  // HID Service UUID 0x1812 w little endian
+        0x0F, 0x18   // Battery Service UUID 0x180F w little endian
+    };
 
-    // Set advertising data with device name and HID service UUID
+    // Set advertising data with device name and services UUIDs
     esp_ble_adv_data_t adv_data = {};
     adv_data.set_scan_rsp = false;
     adv_data.include_name = true;
     adv_data.include_txpower = true;
     adv_data.min_interval = 0x20;
     adv_data.max_interval = 0x40;
-    adv_data.appearance = 0x03C2; // Mouse appearance
+    adv_data.appearance = 0x03C2; // Mouse appearance (962 = 0x03C2)
     adv_data.manufacturer_len = 0;
     adv_data.p_manufacturer_data = nullptr;
     adv_data.service_data_len = 0;
     adv_data.p_service_data = nullptr;
-    adv_data.service_uuid_len = 2;
-    adv_data.p_service_uuid = service_uuid;
+    adv_data.service_uuid_len = 4; // 2 services x 2 bytes each
+    adv_data.p_service_uuid = service_uuids;
     adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
 
-    esp_ble_gap_config_adv_data(&adv_data);
-    esp_ble_gap_start_advertising(&adv_params);
+    esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set advertising data for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
+        return;
+    }
 
-    ESP_LOGI(TAG, "Started advertising HID mouse %d: %s", mouse_id_, device_name_.c_str());
+    ret = esp_ble_gap_start_advertising(&adv_params);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start advertising for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
+        return;
+    }
+
+    ESP_LOGI(TAG, "Started advertising HID mouse %d: %s with HID and Battery services", mouse_id_, device_name_.c_str());
 }
 
 void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
@@ -315,38 +330,67 @@ void SimpleBLEMouse::gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_i
     switch (event) {
         case ESP_GATTS_REG_EVT:
             ESP_LOGI(TAG, "GATT server registered for mouse %d, gatts_if %d", mouse->mouse_id_, gatts_if);
+            // Set device name first
+            esp_ble_gap_set_device_name(mouse->device_name_.c_str());
             mouse->setup_hid_service_();
             break;
         case ESP_GATTS_CREATE_EVT:
-            mouse->service_handle_ = param->create.service_handle;
-            ESP_LOGI(TAG, "HID service created for mouse %d, handle %d", mouse->mouse_id_, mouse->service_handle_);
-            esp_ble_gatts_start_service(mouse->service_handle_);
-            mouse->add_hid_characteristics_();
+            if (param->create.status == ESP_GATT_OK) {
+                mouse->service_handle_ = param->create.service_handle;
+                ESP_LOGI(TAG, "HID service created for mouse %d, handle %d", mouse->mouse_id_, mouse->service_handle_);
+                esp_ble_gatts_start_service(mouse->service_handle_);
+            } else {
+                ESP_LOGE(TAG, "Failed to create HID service for mouse %d: %d", mouse->mouse_id_, param->create.status);
+            }
             break;
         case ESP_GATTS_START_EVT:
-            ESP_LOGI(TAG, "HID service started for mouse %d", mouse->mouse_id_);
-            mouse->start_advertising_();
+            if (param->start.status == ESP_GATT_OK) {
+                ESP_LOGI(TAG, "HID service started for mouse %d", mouse->mouse_id_);
+                mouse->add_hid_characteristics_();
+            } else {
+                ESP_LOGE(TAG, "Failed to start HID service for mouse %d: %d", mouse->mouse_id_, param->start.status);
+            }
             break;
         case ESP_GATTS_ADD_CHAR_EVT:
-            ESP_LOGD(TAG, "Characteristic added for mouse %d: UUID 0x%04X, handle %d",
-                     mouse->mouse_id_, param->add_char.char_uuid.uuid.uuid16, param->add_char.attr_handle);
-            if (param->add_char.char_uuid.uuid.uuid16 == 0x2A4D) { // HID Report characteristic
-                mouse->char_handle_ = param->add_char.attr_handle;
-                ESP_LOGI(TAG, "HID Report characteristic handle for mouse %d: %d", mouse->mouse_id_, mouse->char_handle_);
+            if (param->add_char.status == ESP_GATT_OK) {
+                ESP_LOGD(TAG, "Characteristic added for mouse %d: UUID 0x%04X, handle %d",
+                         mouse->mouse_id_, param->add_char.char_uuid.uuid.uuid16, param->add_char.attr_handle);
+                if (param->add_char.char_uuid.uuid.uuid16 == 0x2A4D) { // HID Report characteristic
+                    mouse->char_handle_ = param->add_char.attr_handle;
+                    ESP_LOGI(TAG, "HID Report characteristic handle for mouse %d: %d", mouse->mouse_id_, mouse->char_handle_);
+                    // All characteristics added, start advertising
+                    mouse->start_advertising_();
+                }
+            } else {
+                ESP_LOGE(TAG, "Failed to add characteristic for mouse %d: %d", mouse->mouse_id_, param->add_char.status);
             }
             break;
         case ESP_GATTS_CONNECT_EVT:
             mouse->conn_id_ = param->connect.conn_id;
             mouse->connected_ = true;
-            ESP_LOGI(TAG, "Mouse %d (%s) connected", mouse->mouse_id_, mouse->device_name_.c_str());
+            ESP_LOGI(TAG, "Mouse %d (%s) connected from %02x:%02x:%02x:%02x:%02x:%02x",
+                     mouse->mouse_id_, mouse->device_name_.c_str(),
+                     param->connect.remote_bda[0], param->connect.remote_bda[1], param->connect.remote_bda[2],
+                     param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5]);
+            // Stop advertising when connected
+            esp_ble_gap_stop_advertising();
             break;
         case ESP_GATTS_DISCONNECT_EVT: {
             mouse->connected_ = false;
-            ESP_LOGI(TAG, "Mouse %d (%s) disconnected, restarting advertising", mouse->mouse_id_, mouse->device_name_.c_str());
+            ESP_LOGI(TAG, "Mouse %d (%s) disconnected, reason: %d", mouse->mouse_id_, mouse->device_name_.c_str(), param->disconnect.reason);
+            // Restart advertising after disconnect
+            vTaskDelay(pdMS_TO_TICKS(1000)); // Wait 1 second before restarting
             mouse->start_advertising_();
             break;
         }
+        case ESP_GATTS_WRITE_EVT:
+            ESP_LOGD(TAG, "Write event for mouse %d: handle %d, len %d", mouse->mouse_id_, param->write.handle, param->write.len);
+            break;
+        case ESP_GATTS_READ_EVT:
+            ESP_LOGD(TAG, "Read event for mouse %d: handle %d", mouse->mouse_id_, param->read.handle);
+            break;
         default:
+            ESP_LOGD(TAG, "Unhandled GATTS event: %d for mouse %d", event, mouse->mouse_id_);
             break;
     }
 }
@@ -420,7 +464,23 @@ void SimpleBLEMouse::add_hid_characteristics_() {
     protocol_mode_val.attr_value = &protocol_mode;
     esp_ble_gatts_add_char(service_handle_, &protocol_mode_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE, &protocol_mode_val, nullptr);
 
+    // Teraz dodaj Battery Service (wymagany dla HID)
+    setup_battery_service_();
+
     ESP_LOGI(TAG, "HID characteristics added for mouse %d", mouse_id_);
+}
+
+void SimpleBLEMouse::setup_battery_service_() {
+    ESP_LOGI(TAG, "Adding Battery Service for mouse %d", mouse_id_);
+
+    // Tworzenie serwisu Battery BLE (UUID: 0x180F)
+    esp_gatt_srvc_id_t battery_service_id = {};
+    battery_service_id.is_primary = true;
+    battery_service_id.id.inst_id = 1; // Different instance ID from HID service
+    battery_service_id.id.uuid.len = ESP_UUID_LEN_16;
+    battery_service_id.id.uuid.uuid.uuid16 = 0x180F;
+
+    esp_ble_gatts_create_service(gatts_if_, &battery_service_id, 4);
 }
 
 void SimpleBLEMouse::send_hid_report_(uint8_t* data, size_t length) {

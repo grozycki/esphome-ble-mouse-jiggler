@@ -60,6 +60,7 @@ private:
 
     void setup_hid_service_();
     void add_hid_characteristics_();
+    void setup_battery_service_();
     void send_hid_report_(uint8_t* data, size_t length);
     void start_advertising_();
 
