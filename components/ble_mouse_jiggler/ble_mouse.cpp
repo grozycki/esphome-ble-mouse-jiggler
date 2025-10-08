@@ -30,27 +30,76 @@ void BleMouseJiggler::setup() {
   // Sprawdź czy ESPHome BLE nie koliduje
   ESP_LOGCONFIG(TAG, "Checking for BLE conflicts...");
 
+  // Dodaj opóźnienie przed inicjalizacją BLE
+  ESP_LOGI(TAG, "🕒 Waiting 2 seconds before BLE initialization to avoid conflicts...");
+  delay(2000);
+
   // Zawsze używaj SimpleBLEMouse - usuwam warunki frameworku
   ESP_LOGCONFIG(TAG, "Creating SimpleBLEMouse instance...");
 
   this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_, this->pin_code_);
-  ESP_LOGCONFIG(TAG, "SimpleBLEMouse instance created successfully");
+  ESP_LOGCONFIG(TAG, "SimpleBLEMouse instance created successfully at %p", this->ble_mouse_);
 
   ESP_LOGCONFIG(TAG, "Calling SimpleBLEMouse::begin()...");
   this->ble_mouse_->begin();
   ESP_LOGCONFIG(TAG, "SimpleBLEMouse::begin() completed");
+
+  // Dodaj diagnostykę stanu BLE
+  ESP_LOGI(TAG, "🔍 BLE DIAGNOSTICS AFTER SETUP:");
+  ESP_LOGI(TAG, "   - Mouse instance pointer: %p", this->ble_mouse_);
+  ESP_LOGI(TAG, "   - Device name: %s", this->device_name_.c_str());
+  ESP_LOGI(TAG, "   - Mouse ID: %d", this->mouse_id_);
+  ESP_LOGI(TAG, "   - Connected status: %s", this->is_connected() ? "YES" : "NO");
+
+  // Wymuś włączenie trybu parowania
+  ESP_LOGI(TAG, "🔗 ENABLING PAIRING MODE for better discoverability...");
+  this->ble_mouse_->enablePairingMode(300000); // 5 minut
+
+  // Dodaj opóźnienie i sprawdź ponownie
+  delay(1000);
+  ESP_LOGI(TAG, "🔍 FINAL CHECK - Connected status: %s", this->is_connected() ? "YES" : "NO");
 
   ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler %d setup complete", this->mouse_id_);
   ESP_LOGCONFIG(TAG, "=== BLE MOUSE JIGGLER SETUP END ===");
 }
 
 void BleMouseJiggler::loop() {
-  if (!this->jiggling_enabled_ || !this->is_connected()) {
+  static uint32_t last_status_log = 0;
+  static bool last_connection_status = false;
+  uint32_t now = millis();
+
+  // Loguj status połączenia co 30 sekund lub przy zmianie
+  bool current_connection_status = this->is_connected();
+  if (now - last_status_log > 30000 || current_connection_status != last_connection_status) {
+    ESP_LOGI(TAG, "🔍 STATUS CHECK - Mouse %d: Connected=%s, Jiggling=%s, Interval=%dms",
+             this->mouse_id_,
+             current_connection_status ? "YES" : "NO",
+             this->jiggling_enabled_ ? "ENABLED" : "DISABLED",
+             this->jiggle_interval_);
+
+    if (!current_connection_status) {
+      ESP_LOGW(TAG, "💡 HELP: To connect, look for '%s' in your computer's Bluetooth settings",
+               this->device_name_.c_str());
+    }
+
+    last_status_log = now;
+    last_connection_status = current_connection_status;
+  }
+
+  // Jeśli nie ma połączenia, spróbuj wymusić advertising co 60 sekund
+  if (!current_connection_status && now > 60000 && (now % 60000) < 1000) {
+    ESP_LOGI(TAG, "🔄 No connection detected - forcing advertising restart for mouse %d", this->mouse_id_);
+    if (this->ble_mouse_) {
+      this->ble_mouse_->enablePairingMode(60000); // 1 minuta
+    }
+  }
+
+  if (!this->jiggling_enabled_ || !current_connection_status) {
     return;
   }
 
-  uint32_t now = millis();
   if (now - this->last_jiggle_time_ >= this->jiggle_interval_) {
+    ESP_LOGD(TAG, "⚡ Performing jiggle for mouse %d", this->mouse_id_);
     this->jiggle_once();
     this->last_jiggle_time_ = now;
   }
@@ -149,6 +198,47 @@ void BleMouseJiggler::jiggle_once() {
 
 bool BleMouseJiggler::is_connected() {
   return this->ble_mouse_ && this->ble_mouse_->isConnected();
+}
+
+void BleMouseJiggler::force_reconnect() {
+  ESP_LOGI(TAG, "🔄 FORCE RECONNECT requested for mouse %d", this->mouse_id_);
+
+  if (this->ble_mouse_) {
+    ESP_LOGI(TAG, "   - Stopping current BLE instance...");
+    this->ble_mouse_->end();
+
+    ESP_LOGI(TAG, "   - Enabling pairing mode for 2 minutes...");
+    this->ble_mouse_->enablePairingMode(120000);
+
+    ESP_LOGI(TAG, "   - Restarting BLE mouse...");
+    this->ble_mouse_->begin();
+
+    ESP_LOGI(TAG, "✅ Force reconnect completed - device should be discoverable now");
+    this->show_pairing_instructions();
+  } else {
+    ESP_LOGE(TAG, "❌ Cannot force reconnect - BLE mouse instance is null");
+  }
+}
+
+void BleMouseJiggler::show_pairing_instructions() {
+  ESP_LOGI(TAG, "");
+  ESP_LOGI(TAG, "📋 === PAIRING INSTRUCTIONS ===");
+  ESP_LOGI(TAG, "1. Open Bluetooth settings on your computer");
+  ESP_LOGI(TAG, "2. Look for device: '%s'", this->device_name_.c_str());
+  ESP_LOGI(TAG, "3. Click 'Connect' or 'Pair'");
+  if (!this->pin_code_.empty()) {
+    ESP_LOGI(TAG, "4. If asked for PIN, enter: %s", this->pin_code_.c_str());
+  } else {
+    ESP_LOGI(TAG, "4. No PIN required for this device");
+  }
+  ESP_LOGI(TAG, "5. Once connected, mouse cursor should start jiggling");
+  ESP_LOGI(TAG, "");
+  ESP_LOGI(TAG, "💡 Troubleshooting:");
+  ESP_LOGI(TAG, "   - If device not visible, call force_reconnect() action");
+  ESP_LOGI(TAG, "   - Make sure Bluetooth is enabled on your computer");
+  ESP_LOGI(TAG, "   - Try removing old pairings if device was paired before");
+  ESP_LOGI(TAG, "================================");
+  ESP_LOGI(TAG, "");
 }
 
 #ifdef USE_ESP_IDF_FRAMEWORK

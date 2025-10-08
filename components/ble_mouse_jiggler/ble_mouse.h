@@ -42,6 +42,10 @@ class BleMouseJiggler : public Component {
   void jiggle_once();
   bool is_connected();
 
+  // Dodane funkcje pomocnicze
+  void force_reconnect();
+  void show_pairing_instructions();
+
  protected:
   SimpleBLEMouse *ble_mouse_{nullptr};
 
