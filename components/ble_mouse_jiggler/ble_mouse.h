@@ -24,8 +24,8 @@ class BleMouseJiggler : public Component {
   void loop() override;
   void dump_config() override;
   float get_setup_priority() const override {
-    ESP_LOGI("ble_mouse_jiggler", "get_setup_priority() called - returning BLUETOOTH priority");
-    return setup_priority::BLUETOOTH - 1.0f;
+    ESP_LOGI("ble_mouse_jiggler", "get_setup_priority() called - returning DATA priority");
+    return setup_priority::DATA;  // Zmieniam na prostszy priorytet
   } // Uruchom po BLUETOOTH ale przed innymi komponentami
 
   void set_device_name(const std::string &name) { this->device_name_ = name; }
@@ -61,35 +61,50 @@ class BleMouseJiggler : public Component {
 // Actions for ESPHome automation
 template<typename... Ts> class StartJigglingAction : public Action<Ts...> {
  public:
-  StartJigglingAction(BleMouseJiggler *parent) : parent_(parent) {}
+  StartJigglingAction() = default;  // Domyślny konstruktor
+  explicit StartJigglingAction(BleMouseJiggler *parent) : parent_(parent) {}
 
   void set_parent(BleMouseJiggler *parent) { this->parent_ = parent; }
-  void play(Ts... x) override { this->parent_->start_jiggling(); }
+  void play(Ts... x) override {
+    if (this->parent_) {
+      this->parent_->start_jiggling();
+    }
+  }
 
  protected:
-  BleMouseJiggler *parent_;
+  BleMouseJiggler *parent_{nullptr};
 };
 
 template<typename... Ts> class StopJigglingAction : public Action<Ts...> {
  public:
-  StopJigglingAction(BleMouseJiggler *parent) : parent_(parent) {}
+  StopJigglingAction() = default;  // Domyślny konstruktor
+  explicit StopJigglingAction(BleMouseJiggler *parent) : parent_(parent) {}
 
   void set_parent(BleMouseJiggler *parent) { this->parent_ = parent; }
-  void play(Ts... x) override { this->parent_->stop_jiggling(); }
+  void play(Ts... x) override {
+    if (this->parent_) {
+      this->parent_->stop_jiggling();
+    }
+  }
 
  protected:
-  BleMouseJiggler *parent_;
+  BleMouseJiggler *parent_{nullptr};
 };
 
 template<typename... Ts> class JiggleOnceAction : public Action<Ts...> {
  public:
-  JiggleOnceAction(BleMouseJiggler *parent) : parent_(parent) {}
+  JiggleOnceAction() = default;  // Domyślny konstruktor
+  explicit JiggleOnceAction(BleMouseJiggler *parent) : parent_(parent) {}
 
   void set_parent(BleMouseJiggler *parent) { this->parent_ = parent; }
-  void play(Ts... x) override { this->parent_->jiggle_once(); }
+  void play(Ts... x) override {
+    if (this->parent_) {
+      this->parent_->jiggle_once();
+    }
+  }
 
  protected:
-  BleMouseJiggler *parent_;
+  BleMouseJiggler *parent_{nullptr};
 };
 
 }  // namespace ble_mouse_jiggler

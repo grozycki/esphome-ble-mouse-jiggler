@@ -9,7 +9,7 @@ from esphome.const import (
     CONF_INTERVAL,
 )
 
-DEPENDENCIES = ["esp32", "esp32_ble"]  # Dodaję zależność od esp32_ble
+DEPENDENCIES = ["esp32"]  # Usuwam esp32_ble - może powoduje konflikty
 AUTO_LOAD = ["esp32"]
 CODEOWNERS = ["@esphome/core"]
 
