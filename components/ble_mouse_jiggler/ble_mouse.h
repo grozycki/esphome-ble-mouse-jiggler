@@ -7,10 +7,8 @@
 
 #ifdef USE_ESP32
 
-// Framework-dependent includes
-#ifdef USE_ARDUINO_FRAMEWORK
+// Zawsze include SimpleBLEMouse - usuwam warunki frameworku
 #include "simple_ble_mouse.h"
-#endif
 
 namespace esphome {
 namespace ble_mouse_jiggler {
@@ -37,9 +35,8 @@ class BleMouseJiggler : public Component {
   bool is_connected();
 
  protected:
-#ifdef USE_ARDUINO_FRAMEWORK
   SimpleBLEMouse *ble_mouse_{nullptr};
-#endif
+
   std::string device_name_{"ESP32 Mouse Jiggler"};
   std::string manufacturer_{"ESPHome"};
   uint8_t battery_level_{100};
@@ -51,13 +48,6 @@ class BleMouseJiggler : public Component {
   uint32_t last_jiggle_time_{0};
   bool jiggling_enabled_{true};
   int8_t jiggle_direction_{1}; // 1 or -1 for alternating direction
-
-#ifdef USE_ESP_IDF_FRAMEWORK
-  // ESP-IDF specific BLE variables
-  bool connected_{false};
-  void init_esp_idf_ble_();
-  void send_mouse_report_esp_idf_(int8_t x, int8_t y, uint8_t buttons = 0);
-#endif
 };
 
 // Actions for ESPHome automation

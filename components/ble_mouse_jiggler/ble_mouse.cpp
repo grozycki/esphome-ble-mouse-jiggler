@@ -22,18 +22,10 @@ static const char *const TAG = "ble_mouse_jiggler";
 void BleMouseJiggler::setup() {
   ESP_LOGCONFIG(TAG, "Setting up BLE Mouse Jiggler (ID: %d)...", this->mouse_id_);
 
-#ifdef USE_ARDUINO_FRAMEWORK
-  // Arduino framework implementation
-  ESP_LOGCONFIG(TAG, "Using Arduino framework with ESP32-BLE-Mouse library");
+  // Zawsze używaj SimpleBLEMouse - usuwam warunki frameworku
+  ESP_LOGCONFIG(TAG, "Using SimpleBLEMouse implementation");
   this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_, this->pin_code_);
   this->ble_mouse_->begin();
-#endif
-
-#ifdef USE_ESP_IDF_FRAMEWORK
-  // ESP-IDF framework implementation
-  ESP_LOGCONFIG(TAG, "Using ESP-IDF framework with native BLE API");
-  this->init_esp_idf_ble_();
-#endif
 
   ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler %d setup complete", this->mouse_id_);
 }
@@ -58,14 +50,7 @@ void BleMouseJiggler::dump_config() {
   ESP_LOGCONFIG(TAG, "  Jiggle Interval: %d ms", this->jiggle_interval_);
   ESP_LOGCONFIG(TAG, "  Jiggle Distance: %d px", this->jiggle_distance_);
   ESP_LOGCONFIG(TAG, "  Mouse ID: %d", this->mouse_id_);
-#ifdef USE_ARDUINO_FRAMEWORK
-  ESP_LOGCONFIG(TAG, "  Framework: Arduino");
   ESP_LOGCONFIG(TAG, "  Connected: %s", this->ble_mouse_ && this->ble_mouse_->isConnected() ? "YES" : "NO");
-#endif
-#ifdef USE_ESP_IDF_FRAMEWORK
-  ESP_LOGCONFIG(TAG, "  Framework: ESP-IDF");
-  ESP_LOGCONFIG(TAG, "  Connected: %s", this->connected_ ? "YES" : "NO");
-#endif
 }
 
 void BleMouseJiggler::start_jiggling() {
@@ -90,57 +75,41 @@ void BleMouseJiggler::jiggle_once() {
 
   ESP_LOGV(TAG, "Jiggling mouse %d: x=%d, y=%d", this->mouse_id_, move_x, move_y);
 
-#ifdef USE_ARDUINO_FRAMEWORK
-  // Arduino framework - use SimpleBLEMouse
+  // Zawsze używaj SimpleBLEMouse - usuwam warunki frameworku
   this->ble_mouse_->move(move_x, move_y);
   delay(50);
   this->ble_mouse_->move(-move_x, -move_y);
-#endif
-
-#ifdef USE_ESP_IDF_FRAMEWORK
-  // ESP-IDF framework - use native API
-  this->send_mouse_report_esp_idf_(move_x, move_y);
-  delay(50);
-  this->send_mouse_report_esp_idf_(-move_x, -move_y);
-#endif
 
   // Alternate direction for next jiggle
   this->jiggle_direction_ *= -1;
 }
 
 bool BleMouseJiggler::is_connected() {
-#ifdef USE_ARDUINO_FRAMEWORK
   return this->ble_mouse_ && this->ble_mouse_->isConnected();
-#endif
-#ifdef USE_ESP_IDF_FRAMEWORK
-  return this->connected_;
-#endif
-  return false;
 }
 
 #ifdef USE_ESP_IDF_FRAMEWORK
 void BleMouseJiggler::init_esp_idf_ble_() {
   ESP_LOGI(TAG, "Initializing ESP-IDF BLE for mouse %d", this->mouse_id_);
 
-  // Initialize NVS
-  esp_err_t ret = nvs_flash_init();
-  if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-    ESP_ERROR_CHECK(nvs_flash_erase());
-    ret = nvs_flash_init();
-  }
-  ESP_ERROR_CHECK(ret);
+  // Użyj poprawionej implementacji SimpleBLEMouse także dla ESP-IDF
+  this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_, this->pin_code_);
+  this->ble_mouse_->begin();
 
-  // Note: This is a simplified ESP-IDF implementation
-  // In production, you would need full HID service implementation
-  this->connected_ = true; // Simulate connection for now
-  ESP_LOGW(TAG, "ESP-IDF BLE implementation is simplified - mouse will simulate jiggling without actual BLE");
+  ESP_LOGI(TAG, "ESP-IDF BLE initialized with SimpleBLEMouse for mouse %d", this->mouse_id_);
 }
 
 void BleMouseJiggler::send_mouse_report_esp_idf_(int8_t x, int8_t y, uint8_t buttons) {
-  // Simplified implementation for ESP-IDF
-  // In production, this would send actual HID reports via BLE
-  ESP_LOGV(TAG, "ESP-IDF Mouse %d - Simulated HID report: buttons=%d, x=%d, y=%d",
-           this->mouse_id_, buttons, x, y);
+  // Użyj SimpleBLEMouse także dla ESP-IDF
+  if (this->ble_mouse_) {
+    if (buttons > 0) {
+      this->ble_mouse_->press(buttons);
+    } else {
+      this->ble_mouse_->move(x, y);
+    }
+    ESP_LOGV(TAG, "ESP-IDF Mouse %d - Sent HID report via SimpleBLEMouse: buttons=%d, x=%d, y=%d",
+             this->mouse_id_, buttons, x, y);
+  }
 }
 #endif
 
