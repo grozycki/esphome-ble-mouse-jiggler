@@ -20,14 +20,30 @@ namespace ble_mouse_jiggler {
 static const char *const TAG = "ble_mouse_jiggler";
 
 void BleMouseJiggler::setup() {
+  ESP_LOGCONFIG(TAG, "=== BLE MOUSE JIGGLER SETUP START ===");
   ESP_LOGCONFIG(TAG, "Setting up BLE Mouse Jiggler (ID: %d)...", this->mouse_id_);
+  ESP_LOGCONFIG(TAG, "Device name: %s", this->device_name_.c_str());
+
+  // Sprawdź czy ESPHome BLE nie koliduje
+  ESP_LOGCONFIG(TAG, "Checking for BLE conflicts...");
 
   // Zawsze używaj SimpleBLEMouse - usuwam warunki frameworku
-  ESP_LOGCONFIG(TAG, "Using SimpleBLEMouse implementation");
-  this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_, this->pin_code_);
-  this->ble_mouse_->begin();
+  ESP_LOGCONFIG(TAG, "Creating SimpleBLEMouse instance...");
+
+  try {
+    this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_, this->pin_code_);
+    ESP_LOGCONFIG(TAG, "SimpleBLEMouse instance created successfully");
+
+    ESP_LOGCONFIG(TAG, "Calling SimpleBLEMouse::begin()...");
+    this->ble_mouse_->begin();
+    ESP_LOGCONFIG(TAG, "SimpleBLEMouse::begin() completed");
+
+  } catch (...) {
+    ESP_LOGE(TAG, "Exception occurred during SimpleBLEMouse setup!");
+  }
 
   ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler %d setup complete", this->mouse_id_);
+  ESP_LOGCONFIG(TAG, "=== BLE MOUSE JIGGLER SETUP END ===");
 }
 
 void BleMouseJiggler::loop() {
