@@ -21,7 +21,8 @@ public:
     SimpleBLEMouse(const std::string& device_name = "ESP32 Mouse",
                    const std::string& manufacturer = "ESPHome",
                    uint8_t battery_level = 100,
-                   uint8_t mouse_id = 0);
+                   uint8_t mouse_id = 0,
+                   const std::string& pin_code = "");
 
     void begin();
     void end();
@@ -33,6 +34,8 @@ public:
 
     uint8_t getMouseId() const { return mouse_id_; }
     std::string getDeviceName() const { return device_name_; }
+    void setPinCode(const std::string& pin_code) { pin_code_ = pin_code; }
+    bool hasPinCode() const { return !pin_code_.empty(); }
 
     // Static methods for managing multiple mice
     static void initBluetooth();
@@ -46,6 +49,7 @@ private:
     uint8_t battery_level_;
     uint8_t mouse_id_;
     bool connected_;
+    std::string pin_code_;
 
     // Instance-specific BLE handles
     uint16_t gatts_if_;
@@ -55,6 +59,7 @@ private:
     uint16_t app_id_;
 
     void setup_hid_service_();
+    void add_hid_characteristics_();
     void send_hid_report_(uint8_t* data, size_t length);
     void start_advertising_();
 

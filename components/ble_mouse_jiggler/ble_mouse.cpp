@@ -25,7 +25,7 @@ void BleMouseJiggler::setup() {
 #ifdef USE_ARDUINO_FRAMEWORK
   // Arduino framework implementation
   ESP_LOGCONFIG(TAG, "Using Arduino framework with ESP32-BLE-Mouse library");
-  this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_);
+  this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_, this->pin_code_);
   this->ble_mouse_->begin();
 #endif
 

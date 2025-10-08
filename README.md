@@ -1,15 +1,17 @@
 # ESPHome BLE Mouse Jiggler
 
-An ESPHome component for automatic mouse cursor "jiggling" via Bluetooth Low Energy on ESP32. **Supports multiple virtual mice on a single ESP32!**
+An ESPHome component for automatic mouse cursor "jiggling" via Bluetooth Low Energy on ESP32. **Supports multiple virtual mice on a single ESP32 with optional PIN security!**
 
 ## Features
 
 - 🖱️ **Virtual BLE Mouse** - ESP32 presents itself as a Bluetooth mouse
 - ⚡ **Automatic Jiggling** - Subtle cursor movement at regular intervals
+- 🔒 **PIN Code Security** - Optional PIN protection for secure pairing
+- 🛡️ **Full HID Service** - Complete Human Interface Device implementation
 - 🔧 **Configurable Parameters** - Interval, distance, device name customization
 - 🎯 **ESPHome Integration** - Full automation and action support
 - 📱 **Universal Compatibility** - Works with Windows, macOS, Linux
-- 🚀 **Easy Setup** - Uses proven ESP32-BLE-Mouse library
+- 🚀 **Easy Setup** - Enhanced BLE implementation with proper HID service
 - 🖱️🖱️ **Multiple Mice Support** - Create up to multiple virtual mice on one ESP32
 - 🔄 **Auto ID Assignment** - No need to manually manage mouse IDs
 
@@ -36,6 +38,22 @@ ble_mouse_jiggler:
   jiggle_distance: 1
 ```
 
+## Secure Configuration with PIN
+
+Protect your mouse jiggler with a PIN code to prevent unauthorized connections:
+
+```yaml
+# Secure mouse configuration
+ble_mouse_jiggler:
+  id: secure_mouse
+  device_name: "Secure Mouse Jiggler"
+  manufacturer: "ESPHome"
+  pin_code: "123456"  # 6-digit PIN code
+  battery_level: 100
+  jiggle_interval: 60s
+  jiggle_distance: 1
+```
+
 ## Multiple Mice Configuration
 
 Create multiple virtual mice with different names and settings:
@@ -51,24 +69,26 @@ external_components:
 
 # Multiple mice configuration using list syntax
 ble_mouse_jiggler:
-  # First mouse - for work
+  # First mouse - for work (with PIN security)
   - id: work_mouse
     device_name: "Work Mouse Jiggler"
     manufacturer: "ESPHome Work"
+    pin_code: "654321"
     jiggle_interval: 30s
     jiggle_distance: 1
 
-  # Second mouse - for gaming
+  # Second mouse - for gaming (no PIN)
   - id: gaming_mouse
     device_name: "Gaming Mouse Jiggler"
     manufacturer: "ESPHome Gaming"
     jiggle_interval: 120s
     jiggle_distance: 2
 
-  # Third mouse - for presentations
+  # Third mouse - for presentations (with PIN)
   - id: presentation_mouse
     device_name: "Presentation Helper"
     manufacturer: "ESPHome"
+    pin_code: "987654"
     jiggle_interval: 300s
     jiggle_distance: 1
 ```
@@ -78,11 +98,49 @@ ble_mouse_jiggler:
 - `id` (required): ESPHome component ID for automations
 - `device_name` (optional): BLE device name (default: "ESP32 Mouse Jiggler")
 - `manufacturer` (optional): Manufacturer name (default: "ESPHome")
+- `pin_code` (optional): 6-digit PIN code for secure pairing (default: none)
 - `battery_level` (optional): Battery level 0-100% (default: 100)
 - `jiggle_interval` (optional): Interval between movements (default: 60s)
 - `jiggle_distance` (optional): Movement distance in pixels 1-10 (default: 1)
 
 *Note: `mouse_id` is automatically assigned - no need to specify manually!*
+
+## Security Features
+
+### PIN Code Protection
+
+When you set a `pin_code`, the device:
+- Requires PIN entry during Bluetooth pairing
+- Rejects connection attempts without correct PIN
+- Uses BLE encryption and bonding
+- Logs pairing attempts for security monitoring
+
+### Security Modes
+
+- **No PIN**: Any device can connect (default behavior)
+- **With PIN**: Only devices with correct PIN can pair
+
+## Device Pairing
+
+### Windows
+1. Open Settings → Bluetooth & devices
+2. Click "Add device"
+3. Select your ESP32 Mouse Jiggler from the list
+4. Enter PIN code if prompted
+
+### macOS
+1. System Preferences → Bluetooth
+2. Click on the device in the list
+3. Enter PIN code if required
+
+### Linux
+```bash
+bluetoothctl
+scan on
+pair XX:XX:XX:XX:XX:XX
+# Enter PIN when prompted
+connect XX:XX:XX:XX:XX:XX
+```
 
 ## Automations
 
@@ -117,15 +175,7 @@ automation:
       - ble_mouse_jiggler.start:
           id: gaming_mouse
 
-  - alias: "Stop gaming mouse at midnight"
-    trigger:
-      platform: time
-      at: "00:00:00"
-    action:
-      - ble_mouse_jiggler.stop:
-          id: gaming_mouse
-
-  # Manual control
+  # Manual control with PIN security
   - alias: "Emergency jiggle on button press"
     trigger:
       platform: gpio
@@ -134,8 +184,6 @@ automation:
     action:
       - ble_mouse_jiggler.jiggle_once:
           id: work_mouse
-      - ble_mouse_jiggler.jiggle_once:
-          id: gaming_mouse
 ```
 
 ## Available Actions
@@ -178,7 +226,7 @@ automation:
       service: ble_mouse_jiggler.start
       data:
         id: work_mouse
-      
+
   - alias: "Start gaming mouse in evening"
     trigger:
       platform: time
@@ -187,7 +235,7 @@ automation:
       service: ble_mouse_jiggler.start
       data:
         id: gaming_mouse
-      
+
   - alias: "Stop all mice at night"
     trigger:
       platform: time
@@ -207,7 +255,7 @@ script:
       - service: ble_mouse_jiggler.jiggle_once
         data:
           id: work_mouse
-      
+
   gaming_mouse_jiggle:
     sequence:
       - service: ble_mouse_jiggler.jiggle_once
@@ -223,14 +271,6 @@ Actions appear automatically in Home Assistant under **Developer Tools > Service
 
 - **ESP32** (not ESP8266) - Required for Bluetooth support
 - **ESPHome 2023.5.0+**
-
-## Device Pairing
-
-1. Flash the firmware to your ESP32
-2. In Bluetooth settings, you'll see multiple devices (e.g., "Work Mouse Jiggler", "Gaming Mouse Jiggler")
-3. Pair each device individually - they will appear as separate mice in your system
-4. Each mouse can be connected to different devices or the same device
-5. Components automatically start jiggling after connection
 
 ## How It Works
 
@@ -323,7 +363,7 @@ BLE requires significant RAM. If you have many other components, try:
 # Reduce memory usage
 logger:
   level: WARN  # Less verbose logging
-  
+
 # Remove unnecessary components temporarily
 # wifi:
 #   power_save_mode: light  # Use less WiFi features
@@ -339,7 +379,7 @@ esp32:
   framework:
     type: arduino
     version: recommended
-  
+
 # Force BLE/WiFi coexistence
 esphome:
   platformio_options:

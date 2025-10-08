@@ -28,6 +28,7 @@ class BleMouseJiggler : public Component {
   void set_jiggle_interval(uint32_t interval) { this->jiggle_interval_ = interval; }
   void set_jiggle_distance(uint8_t distance) { this->jiggle_distance_ = distance; }
   void set_mouse_id(uint8_t mouse_id) { this->mouse_id_ = mouse_id; }
+  void set_pin_code(const std::string &pin_code) { this->pin_code_ = pin_code; }
 
   // Public methods for manual control
   void start_jiggling();
@@ -45,6 +46,7 @@ class BleMouseJiggler : public Component {
   uint32_t jiggle_interval_{60000}; // 60 seconds in milliseconds
   uint8_t jiggle_distance_{1};
   uint8_t mouse_id_{0}; // Default mouse ID
+  std::string pin_code_;
 
   uint32_t last_jiggle_time_{0};
   bool jiggling_enabled_{true};

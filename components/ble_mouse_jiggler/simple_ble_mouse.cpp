@@ -50,14 +50,15 @@ std::map<uint16_t, SimpleBLEMouse*> SimpleBLEMouse::app_to_mouse_map_;
 bool SimpleBLEMouse::bluetooth_initialized_ = false;
 uint16_t SimpleBLEMouse::next_app_id_ = 0;
 
-SimpleBLEMouse::SimpleBLEMouse(const std::string& device_name, const std::string& manufacturer, uint8_t battery_level, uint8_t mouse_id)
-    : device_name_(device_name), manufacturer_(manufacturer), battery_level_(battery_level), mouse_id_(mouse_id), connected_(false),
+SimpleBLEMouse::SimpleBLEMouse(const std::string& device_name, const std::string& manufacturer, uint8_t battery_level, uint8_t mouse_id, const std::string& pin_code)
+    : device_name_(device_name), manufacturer_(manufacturer), battery_level_(battery_level), mouse_id_(mouse_id), connected_(false), pin_code_(pin_code),
       gatts_if_(ESP_GATT_IF_NONE), conn_id_(0), service_handle_(0), char_handle_(0), app_id_(next_app_id_++) {
 
     mice_instances_[mouse_id_] = this;
     app_to_mouse_map_[app_id_] = this;
 
-    ESP_LOGI(TAG, "Created mouse instance %d: %s (app_id: %d)", mouse_id_, device_name_.c_str(), app_id_);
+    ESP_LOGI(TAG, "Created mouse instance %d: %s (app_id: %d) %s", mouse_id_, device_name_.c_str(), app_id_,
+             pin_code_.empty() ? "bez PIN" : "z kodem PIN");
 }
 
 void SimpleBLEMouse::initBluetooth() {
@@ -107,12 +108,30 @@ void SimpleBLEMouse::initBluetooth() {
         return;
     }
 
+    // Konfiguracja bezpieczeństwa BLE z obsługą PIN
+    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_MITM_BOND;
+    esp_ble_io_cap_t iocap = ESP_IO_CAP_OUT;
+    uint8_t key_size = 16;
+    uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+    uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+    uint32_t passkey = 123456; // Domyślny PIN
+    uint8_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_DISABLE;
+    uint8_t oob_support = ESP_BLE_OOB_DISABLE;
+
+    esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(uint8_t));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(uint8_t));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_ONLY_ACCEPT_SPECIFIED_SEC_AUTH, &auth_option, sizeof(uint8_t));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_OOB_SUPPORT, &oob_support, sizeof(uint8_t));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t));
+
     // Register callbacks
     esp_ble_gatts_register_callback(gatts_event_handler_);
     esp_ble_gap_register_callback(gap_event_handler_);
 
     bluetooth_initialized_ = true;
-    ESP_LOGI(TAG, "Bluetooth initialized successfully");
+    ESP_LOGI(TAG, "Bluetooth initialized successfully with security");
 }
 
 void SimpleBLEMouse::deinitBluetooth() {
@@ -195,7 +214,10 @@ void SimpleBLEMouse::start_advertising_() {
     adv_params.channel_map = ADV_CHNL_ALL;
     adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
 
-    // Set advertising data with device name
+    // Dodaj UUID serwisu HID do reklamy
+    static uint8_t service_uuid[2] = {0x12, 0x18}; // HID Service UUID 0x1812 w little endian
+
+    // Set advertising data with device name and HID service UUID
     esp_ble_adv_data_t adv_data = {};
     adv_data.set_scan_rsp = false;
     adv_data.include_name = true;
@@ -207,14 +229,14 @@ void SimpleBLEMouse::start_advertising_() {
     adv_data.p_manufacturer_data = nullptr;
     adv_data.service_data_len = 0;
     adv_data.p_service_data = nullptr;
-    adv_data.service_uuid_len = 0;
-    adv_data.p_service_uuid = nullptr;
+    adv_data.service_uuid_len = 2;
+    adv_data.p_service_uuid = service_uuid;
     adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
 
     esp_ble_gap_config_adv_data(&adv_data);
     esp_ble_gap_start_advertising(&adv_params);
 
-    ESP_LOGI(TAG, "Started advertising for mouse %d: %s", mouse_id_, device_name_.c_str());
+    ESP_LOGI(TAG, "Started advertising HID mouse %d: %s", mouse_id_, device_name_.c_str());
 }
 
 void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
@@ -222,6 +244,44 @@ void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_ga
         case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
             ESP_LOGD(TAG, "Advertising data set complete");
             break;
+        case ESP_GAP_BLE_PASSKEY_REQ_EVT: {
+            ESP_LOGI(TAG, "Passkey request for device");
+            // Znajdź myszkę na podstawie adresu BLE
+            SimpleBLEMouse* mouse = nullptr;
+            for (auto& pair : mice_instances_) {
+                if (pair.second->hasPinCode()) {
+                    mouse = pair.second;
+                    break;
+                }
+            }
+            if (mouse && !mouse->pin_code_.empty()) {
+                uint32_t passkey = std::stoul(mouse->pin_code_);
+                esp_ble_passkey_reply(param->ble_security.ble_req.bd_addr, true, passkey);
+                ESP_LOGI(TAG, "Replied with PIN code for mouse %d", mouse->mouse_id_);
+            } else {
+                esp_ble_passkey_reply(param->ble_security.ble_req.bd_addr, false, 0);
+                ESP_LOGW(TAG, "No PIN configured, rejecting pairing");
+            }
+            break;
+        }
+        case ESP_GAP_BLE_NC_REQ_EVT: {
+            ESP_LOGI(TAG, "Numeric comparison request, accepting");
+            esp_ble_confirm_reply(param->ble_security.ble_req.bd_addr, true);
+            break;
+        }
+        case ESP_GAP_BLE_SEC_REQ_EVT: {
+            ESP_LOGI(TAG, "Security request received");
+            esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
+            break;
+        }
+        case ESP_GAP_BLE_AUTH_CMPL_EVT: {
+            if (param->ble_security.auth_cmpl.success) {
+                ESP_LOGI(TAG, "Authentication completed successfully");
+            } else {
+                ESP_LOGW(TAG, "Authentication failed with reason: %d", param->ble_security.auth_cmpl.fail_reason);
+            }
+            break;
+        }
         default:
             break;
     }
@@ -256,7 +316,24 @@ void SimpleBLEMouse::gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_i
         case ESP_GATTS_REG_EVT:
             ESP_LOGI(TAG, "GATT server registered for mouse %d, gatts_if %d", mouse->mouse_id_, gatts_if);
             mouse->setup_hid_service_();
+            break;
+        case ESP_GATTS_CREATE_EVT:
+            mouse->service_handle_ = param->create.service_handle;
+            ESP_LOGI(TAG, "HID service created for mouse %d, handle %d", mouse->mouse_id_, mouse->service_handle_);
+            esp_ble_gatts_start_service(mouse->service_handle_);
+            mouse->add_hid_characteristics_();
+            break;
+        case ESP_GATTS_START_EVT:
+            ESP_LOGI(TAG, "HID service started for mouse %d", mouse->mouse_id_);
             mouse->start_advertising_();
+            break;
+        case ESP_GATTS_ADD_CHAR_EVT:
+            ESP_LOGD(TAG, "Characteristic added for mouse %d: UUID 0x%04X, handle %d",
+                     mouse->mouse_id_, param->add_char.char_uuid.uuid.uuid16, param->add_char.attr_handle);
+            if (param->add_char.char_uuid.uuid.uuid16 == 0x2A4D) { // HID Report characteristic
+                mouse->char_handle_ = param->add_char.attr_handle;
+                ESP_LOGI(TAG, "HID Report characteristic handle for mouse %d: %d", mouse->mouse_id_, mouse->char_handle_);
+            }
             break;
         case ESP_GATTS_CONNECT_EVT:
             mouse->conn_id_ = param->connect.conn_id;
@@ -283,6 +360,11 @@ void SimpleBLEMouse::setup_hid_service_() {
     hid_service_id.id.uuid.uuid.uuid16 = 0x1812;
 
     esp_ble_gatts_create_service(gatts_if_, &hid_service_id, 8);
+    ESP_LOGI(TAG, "Creating HID service for mouse %d", mouse_id_);
+}
+
+void SimpleBLEMouse::add_hid_characteristics_() {
+    ESP_LOGI(TAG, "Adding HID characteristics for mouse %d", mouse_id_);
 
     // Dodanie charakterystyki HID Information
     esp_bt_uuid_t hid_info_uuid = {};
@@ -338,16 +420,24 @@ void SimpleBLEMouse::setup_hid_service_() {
     protocol_mode_val.attr_value = &protocol_mode;
     esp_ble_gatts_add_char(service_handle_, &protocol_mode_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE, &protocol_mode_val, nullptr);
 
-    ESP_LOGI(TAG, "HID BLE service i charakterystyki utworzone dla myszy %d", mouse_id_);
+    ESP_LOGI(TAG, "HID characteristics added for mouse %d", mouse_id_);
 }
 
 void SimpleBLEMouse::send_hid_report_(uint8_t* data, size_t length) {
-    if (!connected_ || gatts_if_ == ESP_GATT_IF_NONE) return;
+    if (!connected_ || gatts_if_ == ESP_GATT_IF_NONE || char_handle_ == 0) {
+        ESP_LOGW(TAG, "Cannot send HID report - mouse %d not ready (connected: %d, gatts_if: %d, char_handle: %d)",
+                 mouse_id_, connected_, gatts_if_, char_handle_);
+        return;
+    }
 
-    // In a full implementation, this would send the actual HID report
-    // For now, this is a placeholder
-    ESP_LOGV(TAG, "Mouse %d - Sending HID report: buttons=%d, x=%d, y=%d, wheel=%d",
-             mouse_id_, data[0], (int8_t)data[1], (int8_t)data[2], (int8_t)data[3]);
+    // Wyślij HID report przez charakterystykę HID Report (0x2A4D)
+    esp_err_t ret = esp_ble_gatts_send_indicate(gatts_if_, conn_id_, char_handle_, length, data, false);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to send HID report for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
+    } else {
+        ESP_LOGV(TAG, "Mouse %d - Sent HID report: buttons=%d, x=%d, y=%d, wheel=%d",
+                 mouse_id_, data[0], (int8_t)data[1], (int8_t)data[2], (int8_t)data[3]);
+    }
 }
 
 #endif // USE_ESP32
