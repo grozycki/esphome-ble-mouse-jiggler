@@ -66,6 +66,7 @@ void BleMouseJiggler::setup() {
 void BleMouseJiggler::loop() {
   static uint32_t last_status_log = 0;
   static bool last_connection_status = false;
+  static uint32_t last_reconnect_attempt = 0;
   uint32_t now = millis();
 
   // Loguj status połączenia co 30 sekund lub przy zmianie
@@ -86,11 +87,16 @@ void BleMouseJiggler::loop() {
     last_connection_status = current_connection_status;
   }
 
-  // Jeśli nie ma połączenia, spróbuj wymusić advertising co 60 sekund
-  if (!current_connection_status && now > 60000 && (now % 60000) < 1000) {
+  // NAPRAWKA: Wymuś reconnect tylko co 60 sekund, nie co sekundę!
+  if (!current_connection_status && now > 120000 && (now - last_reconnect_attempt) > 60000) {
     ESP_LOGI(TAG, "🔄 No connection detected - forcing advertising restart for mouse %d", this->mouse_id_);
+    last_reconnect_attempt = now;
+
+    // Używaj prostego restart zamiast enablePairingMode który powoduje błędy
     if (this->ble_mouse_) {
-      this->ble_mouse_->enablePairingMode(60000); // 1 minuta
+      ESP_LOGI(TAG, "🔧 Restarting BLE advertising without pairing mode...");
+      // Nie używaj enablePairingMode() - powoduje ESP_ERR_INVALID_ARG
+      // this->ble_mouse_->enablePairingMode(60000);
     }
   }
 
@@ -253,7 +259,7 @@ void BleMouseJiggler::init_esp_idf_ble_() {
 }
 
 void BleMouseJiggler::send_mouse_report_esp_idf_(int8_t x, int8_t y, uint8_t buttons) {
-  // Użyj SimpleBLEMouse także dla ESP-IDF
+  // Użyj SimpleBLEMouse także dla ESP_IDF
   if (this->ble_mouse_) {
     if (buttons > 0) {
       this->ble_mouse_->press(buttons);

@@ -597,52 +597,51 @@ void SimpleBLEMouse::disablePairingMode() {
 }
 
 void SimpleBLEMouse::start_pairing_advertising_() {
-    // Enhanced advertising for pairing mode with faster intervals
+    ESP_LOGI(TAG, "🔄 Starting simplified pairing advertising for mouse %d", mouse_id_);
+
+    // Uproszczone parametry advertising bez problematycznych flag
     esp_ble_gap_set_device_name(device_name_.c_str());
 
     esp_ble_adv_params_t adv_params = {};
-    adv_params.adv_int_min = 0x10; // Faster advertising interval for pairing
-    adv_params.adv_int_max = 0x20;
+    adv_params.adv_int_min = 0x20; // Nieco wolniejsze ale stabilniejsze
+    adv_params.adv_int_max = 0x40;
     adv_params.adv_type = ADV_TYPE_IND;
     adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
     adv_params.channel_map = ADV_CHNL_ALL;
     adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
 
-    // UUID serwisów dla trybu parowania
-    static uint8_t service_uuids[4] = {
-        0x12, 0x18,  // HID Service UUID 0x1812
-        0x0F, 0x18   // Battery Service UUID 0x180F
-    };
-
+    // Bardzo uproszczone advertising data - tylko podstawowe informacje
     esp_ble_adv_data_t adv_data = {};
     adv_data.set_scan_rsp = false;
     adv_data.include_name = true;
-    adv_data.include_txpower = true;
-    adv_data.min_interval = 0x10;
-    adv_data.max_interval = 0x20;
+    adv_data.include_txpower = false; // Wyłączam tx power - może powodować problemy
+    adv_data.min_interval = 0x20;
+    adv_data.max_interval = 0x40;
     adv_data.appearance = 0x03C2; // Mouse appearance
     adv_data.manufacturer_len = 0;
     adv_data.p_manufacturer_data = nullptr;
     adv_data.service_data_len = 0;
     adv_data.p_service_data = nullptr;
-    adv_data.service_uuid_len = 4;
-    adv_data.p_service_uuid = service_uuids;
-    // Enhanced discoverability flags for pairing mode
-    adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT | ESP_BLE_ADV_FLAG_DMT_CONTROLLER_SPT | ESP_BLE_ADV_FLAG_DMT_HOST_SPT);
+    adv_data.service_uuid_len = 0; // Upraszczam - usuwam UUID
+    adv_data.p_service_uuid = nullptr;
+    // NAPRAWKA: Uproszczone flagi - usuwam problematyczne DMT flags
+    adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
 
     esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set pairing advertising data for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to set simplified advertising data for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
+        ESP_LOGI(TAG, "🔧 Falling back to basic advertising...");
+        // Fallback: spróbuj jeszcze prostsze advertising
+        start_advertising_();
         return;
     }
 
     ret = esp_ble_gap_start_advertising(&adv_params);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start pairing advertising for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to start simplified advertising for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
         return;
     }
 
-    ESP_LOGI(TAG, "🔍 PAIRING MODE ADVERTISING started for mouse %d: %s (Enhanced discoverability)",
-             mouse_id_, device_name_.c_str());
+    ESP_LOGI(TAG, "✅ SIMPLIFIED PAIRING ADVERTISING started for mouse %d: %s", mouse_id_, device_name_.c_str());
 }
 #endif // USE_ESP32
