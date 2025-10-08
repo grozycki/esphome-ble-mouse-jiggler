@@ -15,10 +15,18 @@ namespace ble_mouse_jiggler {
 
 class BleMouseJiggler : public Component {
  public:
+  // Dodaję konstruktor z logowaniem
+  BleMouseJiggler() {
+    ESP_LOGI("ble_mouse_jiggler", "BleMouseJiggler constructor called!");
+  }
+
   void setup() override;
   void loop() override;
   void dump_config() override;
-  float get_setup_priority() const override { return setup_priority::BLUETOOTH - 1.0f; } // Uruchom po BLUETOOTH ale przed innymi komponentami
+  float get_setup_priority() const override {
+    ESP_LOGI("ble_mouse_jiggler", "get_setup_priority() called - returning BLUETOOTH priority");
+    return setup_priority::BLUETOOTH - 1.0f;
+  } // Uruchom po BLUETOOTH ale przed innymi komponentami
 
   void set_device_name(const std::string &name) { this->device_name_ = name; }
   void set_manufacturer(const std::string &manufacturer) { this->manufacturer_ = manufacturer; }

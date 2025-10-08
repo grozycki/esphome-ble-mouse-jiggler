@@ -20,6 +20,9 @@ namespace ble_mouse_jiggler {
 static const char *const TAG = "ble_mouse_jiggler";
 
 void BleMouseJiggler::setup() {
+  ESP_LOGE(TAG, "########## SETUP() FUNCTION CALLED ##########");
+  ESP_LOGE(TAG, "This should appear in logs if setup() is executed!");
+
   ESP_LOGCONFIG(TAG, "=== BLE MOUSE JIGGLER SETUP START ===");
   ESP_LOGCONFIG(TAG, "Setting up BLE Mouse Jiggler (ID: %d)...", this->mouse_id_);
   ESP_LOGCONFIG(TAG, "Device name: %s", this->device_name_.c_str());
@@ -54,6 +57,9 @@ void BleMouseJiggler::loop() {
 }
 
 void BleMouseJiggler::dump_config() {
+  ESP_LOGE(TAG, "########## DUMP_CONFIG() FUNCTION CALLED ##########");
+  ESP_LOGE(TAG, "This should appear in logs if dump_config() is executed!");
+
   ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler %d:", this->mouse_id_);
   ESP_LOGCONFIG(TAG, "  Device Name: %s", this->device_name_.c_str());
   ESP_LOGCONFIG(TAG, "  Manufacturer: %s", this->manufacturer_.c_str());
