@@ -535,7 +535,7 @@ void SimpleBLEMouse::setup_hid_service_() {
     hid_service_id.id.uuid.len = ESP_UUID_LEN_16;
     hid_service_id.id.uuid.uuid.uuid16 = 0x1812;
 
-    esp_ble_gatts_create_service(gatts_if_, &hid_service_id, 8);
+    esp_ble_gatts_create_service(gatts_if_, &hid_service_id, 15); // Zwiększono z 8 do 15
     ESP_LOGI(TAG, "Creating HID service for mouse %d", mouse_id_);
 }
 
