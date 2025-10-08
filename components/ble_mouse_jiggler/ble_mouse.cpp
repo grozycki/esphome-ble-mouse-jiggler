@@ -80,7 +80,28 @@ void BleMouseJiggler::dump_config() {
     ESP_LOGE(TAG, "SimpleBLEMouse::begin() completed - BLE Mouse should now be active!");
 
   } else {
-    ESP_LOGE(TAG, "❌ DIAGNOSTIC: ble_mouse_ is NOT nullptr (%p) - skipping fallback", this->ble_mouse_);
+    ESP_LOGE(TAG, "❌ DIAGNOSTIC: ble_mouse_ is NOT nullptr (%p) - but forcing BLE initialization anyway!", this->ble_mouse_);
+
+    // NOWY WORKAROUND: Nawet jeśli instancja istnieje, wymuś uruchomienie BLE
+    ESP_LOGE(TAG, "🔧 FORCING BLE INITIALIZATION: Calling begin() on existing instance...");
+    this->ble_mouse_->begin();
+    ESP_LOGE(TAG, "🔧 FORCING BLE INITIALIZATION: begin() completed!");
+
+    // Sprawdź czy BLE rzeczywiście działa
+    ESP_LOGE(TAG, "🔧 TESTING: Checking if SimpleBLEMouse is connected...");
+    bool connected = this->ble_mouse_->isConnected();
+    ESP_LOGE(TAG, "🔧 TESTING: SimpleBLEMouse connected status = %s", connected ? "YES" : "NO");
+
+    // Jeśli nadal nie działa, spróbuj ponownie utworzyć instancję
+    if (!connected) {
+      ESP_LOGE(TAG, "🔧 RECREATING: SimpleBLEMouse seems inactive, recreating instance...");
+      delete this->ble_mouse_;
+      this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_, this->pin_code_);
+      ESP_LOGE(TAG, "🔧 RECREATING: New instance created at %p", this->ble_mouse_);
+      ESP_LOGE(TAG, "🔧 RECREATING: Calling begin() on new instance...");
+      this->ble_mouse_->begin();
+      ESP_LOGE(TAG, "🔧 RECREATING: begin() completed on new instance!");
+    }
   }
 
   ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler %d:", this->mouse_id_);
