@@ -60,6 +60,21 @@ void BleMouseJiggler::dump_config() {
   ESP_LOGE(TAG, "########## DUMP_CONFIG() FUNCTION CALLED ##########");
   ESP_LOGE(TAG, "This should appear in logs if dump_config() is executed!");
 
+  // WORKAROUND: Jeśli setup() nie został wywołany, uruchom BLE tutaj
+  if (this->ble_mouse_ == nullptr) {
+    ESP_LOGW(TAG, "⚠️  setup() was not called - starting BLE Mouse from dump_config() as fallback!");
+
+    ESP_LOGCONFIG(TAG, "=== FALLBACK BLE MOUSE SETUP START ===");
+    ESP_LOGCONFIG(TAG, "Creating SimpleBLEMouse instance in fallback mode...");
+
+    this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_, this->pin_code_);
+    ESP_LOGCONFIG(TAG, "SimpleBLEMouse instance created successfully");
+
+    ESP_LOGCONFIG(TAG, "Calling SimpleBLEMouse::begin() in fallback mode...");
+    this->ble_mouse_->begin();
+    ESP_LOGCONFIG(TAG, "SimpleBLEMouse::begin() completed - BLE Mouse should now be active!");
+  }
+
   ESP_LOGCONFIG(TAG, "BLE Mouse Jiggler %d:", this->mouse_id_);
   ESP_LOGCONFIG(TAG, "  Device Name: %s", this->device_name_.c_str());
   ESP_LOGCONFIG(TAG, "  Manufacturer: %s", this->manufacturer_.c_str());
@@ -68,6 +83,7 @@ void BleMouseJiggler::dump_config() {
   ESP_LOGCONFIG(TAG, "  Jiggle Distance: %d px", this->jiggle_distance_);
   ESP_LOGCONFIG(TAG, "  Mouse ID: %d", this->mouse_id_);
   ESP_LOGCONFIG(TAG, "  Connected: %s", this->ble_mouse_ && this->ble_mouse_->isConnected() ? "YES" : "NO");
+  ESP_LOGCONFIG(TAG, "  Fallback Mode: %s", this->ble_mouse_ ? "ACTIVE" : "INACTIVE");
 }
 
 void BleMouseJiggler::start_jiggling() {
