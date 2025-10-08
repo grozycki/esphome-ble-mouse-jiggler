@@ -71,11 +71,19 @@ private:
     void start_advertising_();
     void start_pairing_advertising_(); // Added missing declaration
 
+    // Advertising rotation methods
+    static void start_advertising_rotation_();
+    static void start_single_mouse_advertising_(SimpleBLEMouse* mouse);
+    static void create_rotation_task_();
+
     // Static management
     static std::map<uint8_t, SimpleBLEMouse*> mice_instances_;
     static std::map<uint16_t, SimpleBLEMouse*> app_to_mouse_map_;
     static bool bluetooth_initialized_;
     static uint16_t next_app_id_;
+    static SimpleBLEMouse* currently_advertising_mouse_; // Currently advertising mouse
+    static std::vector<SimpleBLEMouse*> advertising_queue_; // Queue for advertising rotation
+    static bool advertising_active_; // Is advertising currently active
 
     static void gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param);
     static void gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);

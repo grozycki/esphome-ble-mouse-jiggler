@@ -49,6 +49,9 @@ std::map<uint8_t, SimpleBLEMouse*> SimpleBLEMouse::mice_instances_;
 std::map<uint16_t, SimpleBLEMouse*> SimpleBLEMouse::app_to_mouse_map_;
 bool SimpleBLEMouse::bluetooth_initialized_ = false;
 uint16_t SimpleBLEMouse::next_app_id_ = 0;
+SimpleBLEMouse* SimpleBLEMouse::currently_advertising_mouse_ = nullptr;
+std::vector<SimpleBLEMouse*> SimpleBLEMouse::advertising_queue_;
+bool SimpleBLEMouse::advertising_active_ = false;
 
 SimpleBLEMouse::SimpleBLEMouse(const std::string& device_name, const std::string& manufacturer, uint8_t battery_level, uint8_t mouse_id, const std::string& pin_code)
     : device_name_(device_name), manufacturer_(manufacturer), battery_level_(battery_level), mouse_id_(mouse_id), connected_(false), pin_code_(pin_code), pairing_mode_(false),
@@ -108,21 +111,16 @@ void SimpleBLEMouse::initBluetooth() {
         return;
     }
 
-    // Konfiguracja bezpieczeństwa BLE z obsługą PIN
-    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_MITM_BOND;
-    esp_ble_io_cap_t iocap = ESP_IO_CAP_OUT;
+    // Uproszczona konfiguracja bezpieczeństwa BLE dla lepszej kompatybilności
+    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_NO_BOND; // Brak bonding dla lepszej kompatybilności
+    esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE; // Brak I/O capabilities dla prostszego parowania
     uint8_t key_size = 16;
     uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
     uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
-    uint32_t passkey = 123456; // Domyślny PIN
-    uint8_t auth_option = ESP_BLE_ONLY_ACCEPT_SPECIFIED_AUTH_DISABLE;
-    uint8_t oob_support = ESP_BLE_OOB_DISABLE;
 
     esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(uint8_t));
     esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t));
     esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(uint8_t));
-    esp_ble_gap_set_security_param(ESP_BLE_SM_ONLY_ACCEPT_SPECIFIED_SEC_AUTH, &auth_option, sizeof(uint8_t));
-    esp_ble_gap_set_security_param(ESP_BLE_SM_OOB_SUPPORT, &oob_support, sizeof(uint8_t));
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t));
 
@@ -131,7 +129,7 @@ void SimpleBLEMouse::initBluetooth() {
     esp_ble_gap_register_callback(gap_event_handler_);
 
     bluetooth_initialized_ = true;
-    ESP_LOGI(TAG, "Bluetooth initialized successfully with security");
+    ESP_LOGI(TAG, "Bluetooth initialized successfully with simplified security");
 }
 
 void SimpleBLEMouse::deinitBluetooth() {
@@ -206,52 +204,136 @@ void SimpleBLEMouse::release(uint8_t button) {
 }
 
 void SimpleBLEMouse::start_advertising_() {
-    // Najpierw ustaw nazwę urządzenia
-    esp_ble_gap_set_device_name(device_name_.c_str());
+    // Dodaj myszkę do kolejki reklam jeśli nie jest podłączona
+    if (!connected_) {
+        // Sprawdź czy mysz już jest w kolejce
+        auto it = std::find(advertising_queue_.begin(), advertising_queue_.end(), this);
+        if (it == advertising_queue_.end()) {
+            advertising_queue_.push_back(this);
+            ESP_LOGI(TAG, "Added mouse %d (%s) to advertising queue. Queue size: %d",
+                     mouse_id_, device_name_.c_str(), advertising_queue_.size());
+        }
+    }
+
+    // Jeśli żadna reklama nie jest aktywna, rozpocznij rotację
+    if (!advertising_active_ && !advertising_queue_.empty()) {
+        start_advertising_rotation_();
+    }
+}
+
+void SimpleBLEMouse::start_advertising_rotation_() {
+    if (advertising_queue_.empty()) {
+        advertising_active_ = false;
+        currently_advertising_mouse_ = nullptr;
+        ESP_LOGD(TAG, "Advertising queue empty, stopping rotation");
+        return;
+    }
+
+    // Wybierz pierwszą myszkę z kolejki
+    currently_advertising_mouse_ = advertising_queue_.front();
+    advertising_active_ = true;
+
+    ESP_LOGI(TAG, "🔄 Starting advertising rotation with mouse %d: %s",
+             currently_advertising_mouse_->mouse_id_, currently_advertising_mouse_->device_name_.c_str());
+
+    start_single_mouse_advertising_(currently_advertising_mouse_);
+
+    // Zaplanuj rotację do następnej myszy za 10 sekund
+    // W prawdziwej implementacji użylibyśmy timer, tutaj użyjemy task
+    create_rotation_task_();
+}
+
+void SimpleBLEMouse::start_single_mouse_advertising_(SimpleBLEMouse* mouse) {
+    if (!mouse) return;
+
+    // Ustaw nazwę urządzenia
+    esp_ble_gap_set_device_name(mouse->device_name_.c_str());
 
     esp_ble_adv_params_t adv_params = {};
-    adv_params.adv_int_min = 0x20;
-    adv_params.adv_int_max = 0x40;
+    adv_params.adv_int_min = 0x20; // 20ms
+    adv_params.adv_int_max = 0x40; // 40ms
     adv_params.adv_type = ADV_TYPE_IND;
     adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
     adv_params.channel_map = ADV_CHNL_ALL;
     adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
 
-    // Dodaj UUID serwisów HID i Battery do reklamy
+    // Konfiguracja danych reklamy z UUID serwisów HID
     static uint8_t service_uuids[4] = {
-        0x12, 0x18,  // HID Service UUID 0x1812 w little endian
-        0x0F, 0x18   // Battery Service UUID 0x180F w little endian
+        0x12, 0x18,  // HID Service UUID 0x1812 (little endian)
+        0x0F, 0x18   // Battery Service UUID 0x180F (little endian)
     };
 
-    // Set advertising data with device name and services UUIDs
     esp_ble_adv_data_t adv_data = {};
     adv_data.set_scan_rsp = false;
     adv_data.include_name = true;
     adv_data.include_txpower = true;
     adv_data.min_interval = 0x20;
     adv_data.max_interval = 0x40;
-    adv_data.appearance = 0x03C2; // Mouse appearance (962 = 0x03C2)
+    adv_data.appearance = 0x03C2; // HID Mouse appearance (962 decimal = 0x03C2)
     adv_data.manufacturer_len = 0;
     adv_data.p_manufacturer_data = nullptr;
     adv_data.service_data_len = 0;
     adv_data.p_service_data = nullptr;
-    adv_data.service_uuid_len = 4; // 2 services x 2 bytes each
+    adv_data.service_uuid_len = 4; // 2 services × 2 bytes each
     adv_data.p_service_uuid = service_uuids;
     adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
 
     esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set advertising data for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to set advertising data for mouse %d: %s", mouse->mouse_id_, esp_err_to_name(ret));
         return;
     }
 
     ret = esp_ble_gap_start_advertising(&adv_params);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start advertising for mouse %d: %s", mouse_id_, esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to start advertising for mouse %d: %s", mouse->mouse_id_, esp_err_to_name(ret));
         return;
     }
 
-    ESP_LOGI(TAG, "Started advertising HID mouse %d: %s with HID and Battery services", mouse_id_, device_name_.c_str());
+    ESP_LOGI(TAG, "📡 Now advertising mouse %d: %s (HID Mouse with Battery service)",
+             mouse->mouse_id_, mouse->device_name_.c_str());
+}
+
+void SimpleBLEMouse::create_rotation_task_() {
+    // Tworzymy zadanie FreeRTOS dla rotacji reklam
+    xTaskCreate([](void* param) {
+        while (true) {
+            vTaskDelay(pdMS_TO_TICKS(10000)); // Czekaj 10 sekund
+
+            if (!advertising_active_ || advertising_queue_.empty()) {
+                break; // Zakończ zadanie jeśli reklama nieaktywna
+            }
+
+            // Przesuń pierwszą myszkę na koniec kolejki
+            if (!advertising_queue_.empty()) {
+                SimpleBLEMouse* current = advertising_queue_.front();
+                advertising_queue_.erase(advertising_queue_.begin());
+
+                // Jeśli mysz nadal nie jest podłączona, dodaj ją na koniec
+                if (!current->connected_) {
+                    advertising_queue_.push_back(current);
+                }
+            }
+
+            // Zatrzymaj obecną reklamę
+            esp_ble_gap_stop_advertising();
+            vTaskDelay(pdMS_TO_TICKS(100));
+
+            // Rozpocznij reklamę następnej myszy
+            if (!advertising_queue_.empty()) {
+                currently_advertising_mouse_ = advertising_queue_.front();
+                start_single_mouse_advertising_(currently_advertising_mouse_);
+                ESP_LOGI(TAG, "🔄 Rotated to mouse %d: %s",
+                         currently_advertising_mouse_->mouse_id_,
+                         currently_advertising_mouse_->device_name_.c_str());
+            } else {
+                advertising_active_ = false;
+                currently_advertising_mouse_ = nullptr;
+                break;
+            }
+        }
+        vTaskDelete(nullptr); // Usuń zadanie
+    }, "ble_adv_rotation", 2048, nullptr, 5, nullptr);
 }
 
 void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
