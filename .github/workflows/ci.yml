@@ -27,7 +27,7 @@ jobs:
             name: "Test Mouse"
           ' > test.yaml
       - name: Build with ESPHome
-        uses: esphome/build-action@v2
+        uses: esphome/build-action@v3
         with:
           yaml_file: test.yaml
           esphome_version: latest
