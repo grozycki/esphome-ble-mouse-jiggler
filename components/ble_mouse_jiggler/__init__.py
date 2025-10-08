@@ -5,7 +5,6 @@ from esphome import automation
 from esphome.const import (
     CONF_ID,
     CONF_NAME,
-    CONF_MANUFACTURER,
     CONF_BATTERY_LEVEL,
     CONF_INTERVAL,
 )
@@ -13,21 +12,22 @@ from esphome.const import (
 DEPENDENCIES = ["esp32"]
 AUTO_LOAD = ["esp32"]
 
-# Definiowanie nowych kluczy konfiguracyjnych
+# Define custom configuration keys not available in esphome.const
+CONF_MANUFACTURER = "manufacturer"
 CONF_DISTANCE = "distance"
 CONF_MOUSE_ID = "mouse_id"
 CONF_PIN_CODE = "pin_code"
 
-# Namespace i klasa
+# Namespace and class
 ble_mouse_jiggler_ns = cg.esphome_ns.namespace("ble_mouse_jiggler")
 BleMouseJiggler = ble_mouse_jiggler_ns.class_("BleMouseJiggler", cg.Component)
 
-# Akcje do automatyzacji
+# Actions for automation
 StartJigglingAction = ble_mouse_jiggler_ns.class_("StartJigglingAction", cg.Action)
 StopJigglingAction = ble_mouse_jiggler_ns.class_("StopJigglingAction", cg.Action)
 JiggleOnceAction = ble_mouse_jiggler_ns.class_("JiggleOnceAction", cg.Action)
 
-# Schemat konfiguracji
+# Configuration schema
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(BleMouseJiggler),
@@ -53,12 +53,12 @@ async def to_code(config):
     cg.add(var.set_jiggle_distance(config[CONF_DISTANCE]))
     cg.add(var.set_mouse_id(config[CONF_MOUSE_ID]))
 
-    # Dodaj kod PIN jeśli został podany
+    # Add PIN code if provided
     if CONF_PIN_CODE in config:
         cg.add(var.set_pin_code(config[CONF_PIN_CODE]))
 
 
-# Akcje dla automatyzacji ESPHome
+# Actions for ESPHome automation
 @automation.register_action(
     "ble_mouse_jiggler.start_jiggling",
     StartJigglingAction,
