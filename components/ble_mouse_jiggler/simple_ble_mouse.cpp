@@ -289,34 +289,54 @@ void SimpleBLEMouse::setup_hid_service_() {
     hid_info_uuid.len = ESP_UUID_LEN_16;
     hid_info_uuid.uuid.uuid16 = 0x2A4A;
     uint8_t hid_info[4] = {0x01, 0x01, 0x00, 0x02}; // HID info: ver 1.1, country code 0, flags 2
-    esp_ble_gatts_add_char(service_handle_, &hid_info_uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, hid_info, nullptr);
+    esp_attr_value_t hid_info_val = {};
+    hid_info_val.attr_max_len = sizeof(hid_info);
+    hid_info_val.attr_len = sizeof(hid_info);
+    hid_info_val.attr_value = hid_info;
+    esp_ble_gatts_add_char(service_handle_, &hid_info_uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &hid_info_val, nullptr);
 
     // Dodanie charakterystyki HID Report Map
     esp_bt_uuid_t report_map_uuid = {};
     report_map_uuid.len = ESP_UUID_LEN_16;
     report_map_uuid.uuid.uuid16 = 0x2A4B;
-    esp_ble_gatts_add_char(service_handle_, &report_map_uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, (uint8_t*)hid_mouse_report_descriptor, sizeof(hid_mouse_report_descriptor));
+    esp_attr_value_t report_map_val = {};
+    report_map_val.attr_max_len = sizeof(hid_mouse_report_descriptor);
+    report_map_val.attr_len = sizeof(hid_mouse_report_descriptor);
+    report_map_val.attr_value = (uint8_t*)hid_mouse_report_descriptor;
+    esp_ble_gatts_add_char(service_handle_, &report_map_uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &report_map_val, nullptr);
 
     // Dodanie charakterystyki HID Control Point
     esp_bt_uuid_t control_point_uuid = {};
     control_point_uuid.len = ESP_UUID_LEN_16;
     control_point_uuid.uuid.uuid16 = 0x2A4C;
     uint8_t control_point = 0;
-    esp_ble_gatts_add_char(service_handle_, &control_point_uuid, ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_WRITE_NR, &control_point, nullptr);
+    esp_attr_value_t control_point_val = {};
+    control_point_val.attr_max_len = sizeof(control_point);
+    control_point_val.attr_len = sizeof(control_point);
+    control_point_val.attr_value = &control_point;
+    esp_ble_gatts_add_char(service_handle_, &control_point_uuid, ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_WRITE_NR, &control_point_val, nullptr);
 
     // Dodanie charakterystyki HID Report
     esp_bt_uuid_t report_uuid = {};
     report_uuid.len = ESP_UUID_LEN_16;
     report_uuid.uuid.uuid16 = 0x2A4D;
     uint8_t report_val[4] = {0, 0, 0, 0};
-    esp_ble_gatts_add_char(service_handle_, &report_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_NOTIFY, report_val, nullptr);
+    esp_attr_value_t report_attr_val = {};
+    report_attr_val.attr_max_len = sizeof(report_val);
+    report_attr_val.attr_len = sizeof(report_val);
+    report_attr_val.attr_value = report_val;
+    esp_ble_gatts_add_char(service_handle_, &report_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_NOTIFY, &report_attr_val, nullptr);
 
     // Dodanie charakterystyki Protocol Mode
     esp_bt_uuid_t protocol_mode_uuid = {};
     protocol_mode_uuid.len = ESP_UUID_LEN_16;
     protocol_mode_uuid.uuid.uuid16 = 0x2A4E;
     uint8_t protocol_mode = 1; // Report Protocol
-    esp_ble_gatts_add_char(service_handle_, &protocol_mode_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE, &protocol_mode, nullptr);
+    esp_attr_value_t protocol_mode_val = {};
+    protocol_mode_val.attr_max_len = sizeof(protocol_mode);
+    protocol_mode_val.attr_len = sizeof(protocol_mode);
+    protocol_mode_val.attr_value = &protocol_mode;
+    esp_ble_gatts_add_char(service_handle_, &protocol_mode_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE, &protocol_mode_val, nullptr);
 
     ESP_LOGI(TAG, "HID BLE service i charakterystyki utworzone dla myszy %d", mouse_id_);
 }
