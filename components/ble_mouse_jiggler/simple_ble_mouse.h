@@ -13,15 +13,23 @@
 #include "esp_gatt_common_api.h"
 #include "nvs_flash.h"
 
-// State machine for service creation
-enum class ServiceCreationState {
+// State machine for service and characteristic creation
+enum class CreationState {
     IDLE,
     CREATING_HID_SERVICE,
+    STARTING_HID_SERVICE,
+    ADDING_HID_INFO_CHAR,
+    ADDING_HID_REPORT_MAP_CHAR,
+    ADDING_HID_CONTROL_POINT_CHAR,
+    ADDING_HID_REPORT_CHAR,
     CREATING_BATTERY_SERVICE,
-    CREATING_DIS_SERVICE, // Device Information Service
-    ADDING_HID_CHARS,
-    ADDING_BATTERY_CHARS,
-    ADDING_DIS_CHARS,
+    STARTING_BATTERY_SERVICE,
+    ADDING_BATTERY_LEVEL_CHAR,
+    CREATING_DIS_SERVICE,
+    STARTING_DIS_SERVICE,
+    ADDING_DIS_MANUFACTURER_CHAR,
+    ADDING_DIS_MODEL_CHAR,
+    ADDING_DIS_PNP_ID_CHAR,
     DONE
 };
 
@@ -30,8 +38,7 @@ public:
     SimpleBLEMouse(const std::string& device_name = "ESP32 Mouse",
                    const std::string& manufacturer = "ESPHome",
                    uint8_t battery_level = 100,
-                   uint8_t mouse_id = 0,
-                   const std::string& pin_code = "");
+                   uint8_t mouse_id = 0);
 
     void begin();
     void end();
@@ -44,28 +51,18 @@ public:
 
     uint8_t getMouseId() const { return mouse_id_; }
     std::string getDeviceName() const { return device_name_; }
-    void setPinCode(const std::string& pin_code) { pin_code_ = pin_code; }
-    bool hasPinCode() const { return !pin_code_.empty(); }
-
-    void enablePairingMode(uint32_t duration_ms = 120000);
-    void disablePairingMode();
-    bool isPairingMode() const { return pairing_mode_; }
 
     static void initBluetooth();
-    static void deinitBluetooth();
     static SimpleBLEMouse* getMouseById(uint8_t mouse_id);
-    static std::vector<SimpleBLEMouse*> getAllMice();
 
 private:
-    friend class BleMouseJiggler; // Allow main component to access private members
+    friend class BleMouseJiggler;
 
     std::string device_name_;
     std::string manufacturer_;
     uint8_t battery_level_;
     uint8_t mouse_id_;
     bool connected_;
-    std::string pin_code_;
-    bool pairing_mode_;
 
     uint16_t gatts_if_;
     uint16_t conn_id_;
@@ -80,37 +77,16 @@ private:
     uint16_t hid_report_char_handle_;
     uint16_t battery_level_char_handle_;
 
-    // State machine for service creation
-    ServiceCreationState service_creation_state_;
+    CreationState creation_state_;
 
-    void setup_services_();
-    void setup_hid_service_();
-    void add_hid_characteristics_();
-    void setup_battery_service_();
-    void add_battery_characteristic_();
-    void setup_dis_service_();
-    void add_dis_characteristics_();
+    void execute_creation_step_();
     void send_hid_report_(uint8_t* data, size_t length);
     void start_advertising_();
-    void start_pairing_advertising_();
-
-    static void start_advertising_rotation_();
-    static void start_single_mouse_advertising_(SimpleBLEMouse* mouse);
-    static void create_rotation_task_();
-    static void advertising_service_loop();
 
     static std::map<uint8_t, SimpleBLEMouse*> mice_instances_;
     static std::map<uint16_t, SimpleBLEMouse*> app_to_mouse_map_;
     static bool bluetooth_initialized_;
     static uint16_t next_app_id_;
-    static SimpleBLEMouse* currently_advertising_mouse_;
-    static std::vector<SimpleBLEMouse*> advertising_queue_;
-    static bool advertising_active_;
-    static uint32_t adv_request_start_ms_;
-    static int adv_attempt_;
-    static bool adv_pairing_mode_;
-    static bool adv_fallback_used_;
-    static uint32_t adv_restart_count_;
 
     static void gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param);
     static void gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);
