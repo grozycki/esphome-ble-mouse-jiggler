@@ -1,0 +1,14 @@
+esphome:
+  name: test-mouse-jiggler-espidf
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+external_components:
+  - source:
+      type: local
+      path: ../../components
+
+ble_mouse_jiggler:

@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  compile-arduino:
+    build:
+      context: .
+      dockerfile: ./.docker/esphome/Dockerfile
+    volumes:
+      - .:/data
+      - ./.cache:/cache
+    command: ["compile", ".docker/esphome/test-arduino.yaml"]
+
+  compile-espidf:
+    build:
+      context: .
+      dockerfile: ./.docker/esphome/Dockerfile
+    volumes:
+      - .:/data
+      - ./.cache:/cache
+    command: ["compile", ".docker/esphome/test-espidf.yaml"]
+
+  qemu:
+    build:
+      context: ./.docker/qemu
+      dockerfile: Dockerfile
+    volumes:
+      - .:/project
+    working_dir: /project
+    depends_on:
+      compile-arduino:
+        condition: service_completed_successfully
+      compile-espidf:
+        condition: service_completed_successfully

@@ -15,6 +15,33 @@ An ESPHome component for automatic mouse cursor "jiggling" via Bluetooth Low Ene
 - 🖱️🖱️ **Multiple Mice Support** - Create up to multiple virtual mice on one ESP32
 - 🔄 **Auto ID Assignment** - No need to manually manage mouse IDs
 
+## Testing Environment
+
+This project includes a local testing environment based on Docker and `docker-compose`. This setup allows you to compile the firmware and run it in a QEMU virtual machine, all within Docker containers.
+
+### Dependencies
+
+- **Docker & Docker Compose**: The only requirement is a working installation of Docker and Docker Compose. [Install Docker](https://docs.docker.com/get-docker/)
+
+### Running Tests
+
+To run the entire test pipeline, execute the following command:
+
+```sh
+make test
+```
+
+This command uses `docker-compose` to:
+1.  Build a container with ESPHome and compile the firmware.
+2.  Build a container with QEMU.
+3.  Run the compiled firmware in the QEMU container.
+
+To clean up the environment (stop and remove containers, delete build artifacts), run:
+
+```sh
+make clean
+```
+
 ## Installation
 
 Add the component to your ESPHome configuration:
