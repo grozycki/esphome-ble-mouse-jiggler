@@ -46,39 +46,6 @@ void BleMouseJiggler::dump_config() {
     if (!this->pin_code_.empty()) {
         ESP_LOGCONFIG(TAG, "  PIN Code: [set]");
     }
-
-    // Diagnostic logs
-    ESP_LOGE(TAG, "########## DUMP_CONFIG() FUNCTION CALLED ##########");
-    ESP_LOGE(TAG, "This should appear in logs if dump_config() is executed!");
-
-    if (this->ble_mouse_ != nullptr) {
-        ESP_LOGE(TAG, "🔍 DIAGNOSTIC: ble_mouse_ pointer = %p", (void*)this->ble_mouse_);
-        ESP_LOGE(TAG, "🔍 DIAGNOSTIC: checking if ble_mouse_ is nullptr...");
-
-        if (this->ble_mouse_->isConnected()) {
-            ESP_LOGE(TAG, "✅ DIAGNOSTIC: ble_mouse_ is connected!");
-        } else {
-            ESP_LOGE(TAG, "❌ DIAGNOSTIC: ble_mouse_ is NOT connected!");
-        }
-    } else {
-        ESP_LOGE(TAG, "❌ DIAGNOSTIC: ble_mouse_ is nullptr!");
-    }
-
-    // Forcing reinitialization for testing
-    if (this->ble_mouse_ != nullptr) {
-        ESP_LOGE(TAG, "❌ DIAGNOSTIC: ble_mouse_ is NOT nullptr (%p) - but forcing BLE initialization anyway!", (void*)this->ble_mouse_);
-
-        if (!this->ble_mouse_->isConnected()) {
-             ESP_LOGE(TAG, "🔧 RECREATING: SimpleBLEMouse seems inactive, recreating instance...");
-             delete this->ble_mouse_;
-             this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_);
-             ESP_LOGE(TAG, "🔧 RECREATING: New instance created at %p", (void*)this->ble_mouse_);
-        }
-
-        ESP_LOGE(TAG, "🔧 FORCING BLE INITIALIZATION: Calling begin() on existing instance...");
-        this->ble_mouse_->begin();
-        ESP_LOGE(TAG, "🔧 FORCING BLE INITIALIZATION: begin() completed!");
-    }
 }
 
 

@@ -1,8 +1,5 @@
 #pragma once
 
-// Enhanced BLE Mouse implementation supporting multiple instances
-// This allows creating multiple virtual mice on one ESP32
-
 #ifdef USE_ESP32
 
 #include <string>
@@ -15,6 +12,18 @@
 #include "esp_bt_main.h"
 #include "esp_gatt_common_api.h"
 #include "nvs_flash.h"
+
+// State machine for service creation
+enum class ServiceCreationState {
+    IDLE,
+    CREATING_HID_SERVICE,
+    CREATING_BATTERY_SERVICE,
+    CREATING_DIS_SERVICE, // Device Information Service
+    ADDING_HID_CHARS,
+    ADDING_BATTERY_CHARS,
+    ADDING_DIS_CHARS,
+    DONE
+};
 
 class SimpleBLEMouse {
 public:
@@ -31,65 +40,77 @@ public:
     void click(uint8_t button = 1);
     void press(uint8_t button = 1);
     void release(uint8_t button = 1);
+    void setBatteryLevel(uint8_t level);
 
     uint8_t getMouseId() const { return mouse_id_; }
     std::string getDeviceName() const { return device_name_; }
     void setPinCode(const std::string& pin_code) { pin_code_ = pin_code; }
     bool hasPinCode() const { return !pin_code_.empty(); }
 
-    // Pairing mode control
-    void enablePairingMode(uint32_t duration_ms = 120000); // 2 minutes default
+    void enablePairingMode(uint32_t duration_ms = 120000);
     void disablePairingMode();
     bool isPairingMode() const { return pairing_mode_; }
 
-    // Static methods for managing multiple mice
     static void initBluetooth();
     static void deinitBluetooth();
     static SimpleBLEMouse* getMouseById(uint8_t mouse_id);
     static std::vector<SimpleBLEMouse*> getAllMice();
 
 private:
+    friend class BleMouseJiggler; // Allow main component to access private members
+
     std::string device_name_;
     std::string manufacturer_;
     uint8_t battery_level_;
     uint8_t mouse_id_;
     bool connected_;
     std::string pin_code_;
-    bool pairing_mode_; // New state variable for pairing mode
+    bool pairing_mode_;
 
-    // Instance-specific BLE handles
     uint16_t gatts_if_;
     uint16_t conn_id_;
-    uint16_t service_handle_;
-    uint16_t char_handle_;
     uint16_t app_id_;
 
+    // Service handles
+    uint16_t hid_service_handle_;
+    uint16_t battery_service_handle_;
+    uint16_t dis_service_handle_;
+
+    // Characteristic handles
+    uint16_t hid_report_char_handle_;
+    uint16_t battery_level_char_handle_;
+
+    // State machine for service creation
+    ServiceCreationState service_creation_state_;
+
+    void setup_services_();
     void setup_hid_service_();
     void add_hid_characteristics_();
     void setup_battery_service_();
+    void add_battery_characteristic_();
+    void setup_dis_service_();
+    void add_dis_characteristics_();
     void send_hid_report_(uint8_t* data, size_t length);
     void start_advertising_();
-    void start_pairing_advertising_(); // Added missing declaration
+    void start_pairing_advertising_();
 
-    // Advertising rotation methods
     static void start_advertising_rotation_();
     static void start_single_mouse_advertising_(SimpleBLEMouse* mouse);
     static void create_rotation_task_();
     static void advertising_service_loop();
 
-    // Static management
     static std::map<uint8_t, SimpleBLEMouse*> mice_instances_;
     static std::map<uint16_t, SimpleBLEMouse*> app_to_mouse_map_;
     static bool bluetooth_initialized_;
     static uint16_t next_app_id_;
-    static SimpleBLEMouse* currently_advertising_mouse_; // Currently advertising mouse
-    static std::vector<SimpleBLEMouse*> advertising_queue_; // Queue for advertising rotation
-    static bool advertising_active_; // Is advertising currently active
+    static SimpleBLEMouse* currently_advertising_mouse_;
+    static std::vector<SimpleBLEMouse*> advertising_queue_;
+    static bool advertising_active_;
     static uint32_t adv_request_start_ms_;
     static int adv_attempt_;
     static bool adv_pairing_mode_;
     static bool adv_fallback_used_;
-    static uint32_t adv_restart_count_; // counter of successful advertising starts
+    static uint32_t adv_restart_count_;
 
     static void gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param);
     static void gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);
