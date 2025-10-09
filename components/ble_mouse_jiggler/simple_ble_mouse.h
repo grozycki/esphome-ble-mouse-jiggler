@@ -11,9 +11,8 @@
 #include "esp_bt_defs.h"
 #include "esp_bt_main.h"
 #include "esp_gatt_common_api.h"
-#include "nvs_flash.h"
 
-// State machine for service and characteristic creation
+// Final, corrected state machine for service and characteristic creation
 enum class CreationState {
     IDLE,
     CREATING_HID_SERVICE,
@@ -22,6 +21,7 @@ enum class CreationState {
     ADDING_HID_REPORT_MAP_CHAR,
     ADDING_HID_CONTROL_POINT_CHAR,
     ADDING_HID_REPORT_CHAR,
+    ADDING_PROTOCOL_MODE_CHAR,
     CREATING_BATTERY_SERVICE,
     STARTING_BATTERY_SERVICE,
     ADDING_BATTERY_LEVEL_CHAR,
@@ -38,7 +38,8 @@ public:
     SimpleBLEMouse(const std::string& device_name = "ESP32 Mouse",
                    const std::string& manufacturer = "ESPHome",
                    uint8_t battery_level = 100,
-                   uint8_t mouse_id = 0);
+                   uint8_t mouse_id = 0,
+                   const std::string& pin_code = "");
 
     void begin();
     void end();
@@ -63,17 +64,16 @@ private:
     uint8_t battery_level_;
     uint8_t mouse_id_;
     bool connected_;
+    std::string pin_code_;
 
     uint16_t gatts_if_;
     uint16_t conn_id_;
     uint16_t app_id_;
 
-    // Service handles
     uint16_t hid_service_handle_;
     uint16_t battery_service_handle_;
     uint16_t dis_service_handle_;
 
-    // Characteristic handles
     uint16_t hid_report_char_handle_;
     uint16_t battery_level_char_handle_;
 

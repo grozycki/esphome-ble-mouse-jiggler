@@ -12,11 +12,8 @@ static const char *const TAG = "ble_mouse_jiggler";
 void BleMouseJiggler::setup() {
     ESP_LOGI(TAG, "Setting up BLE Mouse Jiggler '%s'...", this->device_name_.c_str());
 
-    // Create a new SimpleBLEMouse instance
-    this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_);
-    if (!this->pin_code_.empty()) {
-        this->ble_mouse_->setPinCode(this->pin_code_);
-    }
+    // Create a new SimpleBLEMouse instance, passing the PIN code in the constructor
+    this->ble_mouse_ = new SimpleBLEMouse(this->device_name_, this->manufacturer_, this->battery_level_, this->mouse_id_, this->pin_code_);
 
     // Start the mouse
     this->ble_mouse_->begin();
