@@ -57,7 +57,6 @@ async def to_code(config):
             cg.add(var.set_pin_code(conf[CONF_PIN_CODE]))
 
         # This is the crucial part that was missing
-        cg.add_library("T-vK/ESP32-BLE-Mouse", None)
         cg.add(var.setup())
 
 
