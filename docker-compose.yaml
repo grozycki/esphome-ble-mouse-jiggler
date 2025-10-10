@@ -18,6 +18,9 @@ services:
       - .:/data
       - ./.cache:/cache
     command: ["compile", ".docker/esphome/test-espidf.yaml"]
+    depends_on:
+      compile-arduino:
+        condition: service_completed_successfully
 
   qemu:
     build:
@@ -27,7 +30,5 @@ services:
       - .:/project
     working_dir: /project
     depends_on:
-      compile-arduino:
-        condition: service_completed_successfully
       compile-espidf:
         condition: service_completed_successfully

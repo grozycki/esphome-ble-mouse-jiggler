@@ -6,5 +6,5 @@ test:
 
 clean:
 	@echo "Cleaning up..."
-	@docker compose down --volumes --remove-orphans
+	@docker compose down --volumes --remove-orphans --rmi all
 	@rm -rf .esphome .cache
