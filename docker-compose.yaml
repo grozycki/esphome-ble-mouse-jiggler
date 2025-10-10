@@ -1,34 +1,60 @@
-version: '3.8'
+volumes:
+  platformio_cache:
+  esphome_builds:
+  esphome_config:
 
 services:
+  # 1. Compile the Arduino firmware
   compile-arduino:
     build:
       context: .
       dockerfile: ./.docker/esphome/Dockerfile
     volumes:
       - .:/data
-      - ./.cache:/cache
-    command: ["compile", ".docker/esphome/test-arduino.yaml"]
+      - platformio_cache:/cache
+      - esphome_builds:/builds
+      - esphome_config:/data/.docker/esphome/.esphome
+    working_dir: /builds
+    command: ["compile", "/data/.docker/esphome/test-arduino.yaml"]
 
+  # 2. Run the Arduino firmware on QEMU
+  test-arduino:
+    build:
+      context: ./.docker/qemu
+      dockerfile: Dockerfile
+    volumes:
+      - esphome_builds:/builds
+    working_dir: /builds
+    command: ["test-mouse-jiggler-arduino"]
+    depends_on:
+      compile-arduino:
+        condition: service_completed_successfully
+
+  # 3. Compile the ESP-IDF firmware
   compile-espidf:
     build:
       context: .
       dockerfile: ./.docker/esphome/Dockerfile
     volumes:
       - .:/data
-      - ./.cache:/cache
-    command: ["compile", ".docker/esphome/test-espidf.yaml"]
+      - platformio_cache:/cache
+      - esphome_builds:/builds
+      - esphome_config:/data/.docker/esphome/.esphome
+    working_dir: /builds
+    command: ["compile", "/data/.docker/esphome/test-espidf.yaml"]
     depends_on:
-      compile-arduino:
+      test-arduino:
         condition: service_completed_successfully
 
-  qemu:
+  # 4. Run the ESP-IDF firmware on QEMU
+  test-espidf:
     build:
       context: ./.docker/qemu
       dockerfile: Dockerfile
     volumes:
-      - .:/project
-    working_dir: /project
+      - esphome_builds:/builds
+    working_dir: /builds
+    command: ["test-mouse-jiggler-espidf"]
     depends_on:
       compile-espidf:
         condition: service_completed_successfully
