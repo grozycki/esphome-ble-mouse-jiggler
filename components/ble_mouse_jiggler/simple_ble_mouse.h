@@ -88,6 +88,12 @@ private:
     static bool bluetooth_initialized_;
     static uint16_t next_app_id_;
 
+    // New static members for improved advertising flow
+    static bool adv_data_configured_;
+    static bool advertising_active_;
+    static esp_ble_adv_params_t adv_params_;
+    static uint16_t adv_service_uuid_;
+
     static void gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param);
     static void gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);
 };

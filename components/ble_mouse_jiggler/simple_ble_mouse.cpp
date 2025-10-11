@@ -47,6 +47,10 @@ std::map<uint8_t, SimpleBLEMouse*> SimpleBLEMouse::mice_instances_;
 std::map<uint16_t, SimpleBLEMouse*> SimpleBLEMouse::app_to_mouse_map_;
 bool SimpleBLEMouse::bluetooth_initialized_ = false;
 uint16_t SimpleBLEMouse::next_app_id_ = 0;
+bool SimpleBLEMouse::adv_data_configured_ = false;
+bool SimpleBLEMouse::advertising_active_ = false;
+esp_ble_adv_params_t SimpleBLEMouse::adv_params_ = {};
+uint16_t SimpleBLEMouse::adv_service_uuid_ = 0x1812;
 
 SimpleBLEMouse::SimpleBLEMouse(const std::string& device_name, const std::string& manufacturer, uint8_t battery_level, uint8_t mouse_id, const std::string& pin_code)
     : device_name_(device_name), manufacturer_(manufacturer), battery_level_(battery_level), mouse_id_(mouse_id), connected_(false), pin_code_(pin_code),
@@ -62,19 +66,34 @@ void SimpleBLEMouse::initBluetooth() {
         ESP_LOGD(TAG, "Bluetooth already initialized.");
         return;
     }
-    ESP_LOGI(TAG, "Initializing Bluetooth");
+    ESP_LOGI(TAG, "Initializing Bluetooth controller & stack");
     esp_err_t ret;
 
+    // Release classic BT memory (we only need BLE)
+    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+
+    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+    ret = esp_bt_controller_init(&bt_cfg);
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "esp_bt_controller_init failed: %s", esp_err_to_name(ret));
+        return;
+    }
+    ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "esp_bt_controller_enable failed: %s", esp_err_to_name(ret));
+        return;
+    }
     ret = esp_bluedroid_init();
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         ESP_LOGE(TAG, "esp_bluedroid_init failed: %s", esp_err_to_name(ret));
         return;
     }
     ret = esp_bluedroid_enable();
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         ESP_LOGE(TAG, "esp_bluedroid_enable failed: %s", esp_err_to_name(ret));
         return;
     }
+
     ret = esp_ble_gatts_register_callback(gatts_event_handler_);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "esp_ble_gatts_register_callback failed: %s", esp_err_to_name(ret));
@@ -85,11 +104,28 @@ void SimpleBLEMouse::initBluetooth() {
         ESP_LOGE(TAG, "esp_ble_gap_register_callback failed: %s", esp_err_to_name(ret));
         return;
     }
+
+    // Basic security (optional PIN not yet wired)
+    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_BOND;
+    esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
+    uint8_t key_size = 16;
+    uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+    uint8_t rsp_key  = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+    esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(auth_req));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(iocap));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(key_size));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(init_key));
+    esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(rsp_key));
+
     bluetooth_initialized_ = true;
     ESP_LOGD(TAG, "Bluetooth initialized successfully.");
 }
 
 void SimpleBLEMouse::begin() {
+    if (mouse_id_ > 0) {
+        ESP_LOGW(TAG, "Multiple virtual mice not fully supported yet. Instance %d will be inert.", mouse_id_);
+        return; // Only first instance active for now
+    }
     ESP_LOGI(TAG, "Starting mouse %d: %s", mouse_id_, device_name_.c_str());
     if (!bluetooth_initialized_) {
         initBluetooth();
@@ -136,7 +172,7 @@ void SimpleBLEMouse::gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_i
             break;
         }
         case ESP_GATTS_CREATE_EVT: {
-            ESP_LOGD(TAG, "CREATE_EVT for service type %d, status: %d", mouse->creation_state_, param->create.status);
+            ESP_LOGD(TAG, "CREATE_EVT for service state %d, status: %d", mouse->creation_state_, param->create.status);
             if (param->create.status == ESP_GATT_OK) {
                 if (mouse->creation_state_ == CreationState::CREATING_HID_SERVICE) {
                     mouse->hid_service_handle_ = param->create.service_handle;
@@ -186,21 +222,16 @@ void SimpleBLEMouse::gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_i
             mouse->connected_ = true;
             mouse->conn_id_ = param->connect.conn_id;
             ESP_LOGI(TAG, "Mouse %d connected, conn_id: %d", mouse->mouse_id_, mouse->conn_id_);
-            esp_ble_gap_stop_advertising();
+            if (advertising_active_) {
+                esp_ble_gap_stop_advertising();
+                advertising_active_ = false;
+            }
             break;
         }
         case ESP_GATTS_DISCONNECT_EVT: {
             mouse->connected_ = false;
             ESP_LOGI(TAG, "Mouse %d disconnected, reason: %d", mouse->mouse_id_, param->disconnect.reason);
             mouse->start_advertising_();
-            break;
-        }
-        case ESP_GATTS_SET_ATTR_VAL_EVT: {
-            ESP_LOGD(TAG, "SET_ATTR_VAL_EVT status: %d, attr_handle: %d", param->set_attr_val.status, param->set_attr_val.attr_handle);
-            break;
-        }
-        case ESP_GATTS_CONF_EVT: {
-            ESP_LOGD(TAG, "CONF_EVT status: %d, conn_id: %d, handle: %d", param->conf.status, param->conf.conn_id, param->conf.handle);
             break;
         }
         default:
@@ -351,7 +382,7 @@ void SimpleBLEMouse::execute_creation_step_() {
             break;
         }
         case CreationState::DONE:
-            ESP_LOGI(TAG, "All services created, starting advertising");
+            ESP_LOGI(TAG, "All services created, preparing advertising");
             start_advertising_();
             break;
         default:
@@ -361,67 +392,73 @@ void SimpleBLEMouse::execute_creation_step_() {
 }
 
 void SimpleBLEMouse::start_advertising_() {
-    static uint16_t service_uuid = 0x1812; // HID
-    static esp_ble_adv_data_t adv_data;
-    static esp_ble_adv_params_t adv_params;
-    static bool initialized = false;
+    if (advertising_active_) {
+        ESP_LOGD(TAG, "Advertising already active - skipping start.");
+        return;
+    }
+    esp_err_t ret;
 
-    if (!initialized) {
-        initialized = true;
-
-        // Configure advertising data
-        adv_data = {}; // Zero-initialize
+    if (!adv_data_configured_) {
+        esp_ble_adv_data_t adv_data = {};
         adv_data.set_scan_rsp = false;
         adv_data.include_name = true;
         adv_data.include_txpower = true;
-        adv_data.appearance = 0x03C2; // Generic Mouse
+        adv_data.appearance = 0x03C2; // Mouse appearance
         adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
-        adv_data.service_uuid_len = sizeof(service_uuid);
-        adv_data.p_service_uuid = (uint8_t*)&service_uuid;
+        adv_data.service_uuid_len = sizeof(adv_service_uuid_);
+        adv_data.p_service_uuid = (uint8_t*)&adv_service_uuid_;
 
-        // Configure advertising parameters
-        adv_params = {}; // Zero-initialize
-        adv_params.adv_int_min = 0x20;
-        adv_params.adv_int_max = 0x40;
-        adv_params.adv_type = ADV_TYPE_IND;
-        adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
-        adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
+        ret = esp_ble_gap_config_adv_data(&adv_data);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "esp_ble_gap_config_adv_data failed: %s", esp_err_to_name(ret));
+            return;
+        }
+        ESP_LOGD(TAG, "Requested advertising data configuration.");
+    } else {
+        ret = esp_ble_gap_start_advertising(&adv_params_);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "esp_ble_gap_start_advertising failed: %s", esp_err_to_name(ret));
+            return;
+        }
+        advertising_active_ = true;
+        ESP_LOGI(TAG, "Started advertising for mouse %d", mouse_id_);
     }
-
-    esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "esp_ble_gap_config_adv_data failed: %s", esp_err_to_name(ret));
-        return;
-    }
-    ESP_LOGD(TAG, "Advertising data configured.");
-
-    ret = esp_ble_gap_start_advertising(&adv_params);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "esp_ble_gap_start_advertising failed: %s", esp_err_to_name(ret));
-        return;
-    }
-    ESP_LOGI(TAG, "Started advertising for mouse %d", mouse_id_);
 }
 
 void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
     ESP_LOGD(TAG, "GAP_EVENT: %d", event);
     switch (event) {
-        case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
+        case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT: {
             ESP_LOGD(TAG, "ADV_DATA_SET_COMPLETE_EVT status: %d", param->adv_data_cmpl.status);
+            if (param->adv_data_cmpl.status == ESP_BT_STATUS_SUCCESS) {
+                adv_data_configured_ = true;
+                // Prepare advertising parameters if first time
+                if (adv_params_.adv_int_min == 0) {
+                    adv_params_ = {};
+                    adv_params_.adv_int_min = 0x20;
+                    adv_params_.adv_int_max = 0x40;
+                    adv_params_.adv_type = ADV_TYPE_IND;
+                    adv_params_.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
+                    adv_params_.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
+                }
+                esp_err_t ret = esp_ble_gap_start_advertising(&adv_params_);
+                if (ret != ESP_OK) {
+                    ESP_LOGE(TAG, "esp_ble_gap_start_advertising failed after data set: %s", esp_err_to_name(ret));
+                } else {
+                    advertising_active_ = true;
+                    ESP_LOGI(TAG, "BLE advertising started successfully.");
+                }
+            } else {
+                ESP_LOGE(TAG, "Advertising data config failed status: %d", param->adv_data_cmpl.status);
+            }
             break;
-        case ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT:
-            ESP_LOGD(TAG, "SCAN_RSP_DATA_SET_COMPLETE_EVT status: %d", param->scan_rsp_data_cmpl.status);
-            break;
+        }
         case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
             ESP_LOGD(TAG, "ADV_START_COMPLETE_EVT status: %d", param->adv_start_cmpl.status);
-            if (param->adv_start_cmpl.status == ESP_BT_STATUS_SUCCESS) {
-                ESP_LOGI(TAG, "BLE advertising started successfully.");
-            } else {
-                ESP_LOGE(TAG, "BLE advertising failed to start, status: %d", param->adv_start_cmpl.status);
-            }
             break;
         case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
             ESP_LOGD(TAG, "ADV_STOP_COMPLETE_EVT status: %d", param->adv_stop_cmpl.status);
+            advertising_active_ = false;
             break;
         case ESP_GAP_BLE_SEC_REQ_EVT: {
             ESP_LOGI(TAG, "Security request received.");

@@ -1,6 +1,5 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import esp32_ble
 from esphome import automation
 from esphome.const import (
     CONF_ID,
@@ -9,7 +8,7 @@ from esphome.const import (
     CONF_INTERVAL,
 )
 
-DEPENDENCIES = ["esp32_ble"]
+DEPENDENCIES = []
 CODEOWNERS = ["@grozycki"]
 
 CONF_MANUFACTURER = "manufacturer"
@@ -51,13 +50,11 @@ async def to_code(config):
         cg.add(var.set_battery_level(conf[CONF_BATTERY_LEVEL]))
         cg.add(var.set_jiggle_interval(conf[CONF_INTERVAL]))
         cg.add(var.set_jiggle_distance(conf[CONF_JIGGLE_DISTANCE]))
-        cg.add(var.set_mouse_id(i)) # Automatically assign mouse_id
+        cg.add(var.set_mouse_id(i))  # Automatically assign mouse_id
 
         if CONF_PIN_CODE in conf:
             cg.add(var.set_pin_code(conf[CONF_PIN_CODE]))
-
-        # This is the crucial part that was missing
-        cg.add(var.setup())
+        # Do NOT call var.setup() manually here.
 
 
 @automation.register_action(

@@ -10,6 +10,10 @@ namespace ble_mouse_jiggler {
 static const char *const TAG = "ble_mouse_jiggler";
 
 void BleMouseJiggler::setup() {
+    if (this->ble_mouse_ != nullptr) {
+        ESP_LOGW(TAG, "setup() called more than once for '%s' - ignoring duplicate.", this->device_name_.c_str());
+        return; // Prevent double initialization
+    }
     ESP_LOGI(TAG, "Setting up BLE Mouse Jiggler '%s'...", this->device_name_.c_str());
 
     // Create a new SimpleBLEMouse instance, passing the PIN code in the constructor
@@ -88,3 +92,4 @@ void BleMouseJiggler::on_jiggle_status(bool connected, bool jiggling, uint32_t i
 }  // namespace esphome
 
 #endif
+
