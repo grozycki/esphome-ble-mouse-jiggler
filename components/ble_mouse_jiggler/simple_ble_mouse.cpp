@@ -187,7 +187,7 @@ void SimpleBLEMouse::begin() {
 
 void SimpleBLEMouse::execute_creation_step_() {
     esp_err_t ret;
-    ESP_LOGCONFIG(TAG, "State progress: %d", creation_state_); // promote to CONFIG
+    ESP_LOGI(TAG, "State progress: %d", creation_state_); // replaced ESP_LOGCONFIG
     switch (creation_state_) {
         case CreationState::CREATING_HID_SERVICE: {
             esp_gatt_srvc_id_t srvc_id = {};
@@ -197,7 +197,7 @@ void SimpleBLEMouse::execute_creation_step_() {
             srvc_id.id.uuid.uuid.uuid16 = 0x1812;
             ret = esp_ble_gatts_create_service(gatts_if_, &srvc_id, 20);
             if (ret != ESP_OK) {
-                ESP_LOGCONFIG(TAG, "[ERR] create HID service failed: %s", esp_err_to_name(ret));
+                ESP_LOGI(TAG, "[ERR] create HID service failed: %s", esp_err_to_name(ret));
             }
             creation_state_ = CreationState::STARTING_HID_SERVICE;
             break;
@@ -299,7 +299,7 @@ void SimpleBLEMouse::execute_creation_step_() {
             srvc_id.id.uuid.uuid.uuid16 = 0x180F;
             ret = esp_ble_gatts_create_service(gatts_if_, &srvc_id, 4);
             if (ret != ESP_OK) {
-                ESP_LOGCONFIG(TAG, "[ERR] create Battery service failed: %s", esp_err_to_name(ret));
+                ESP_LOGI(TAG, "[ERR] create Battery service failed: %s", esp_err_to_name(ret));
             }
             creation_state_ = CreationState::STARTING_BATTERY_SERVICE;
             break;
@@ -330,7 +330,7 @@ void SimpleBLEMouse::execute_creation_step_() {
             srvc_id.id.uuid.uuid.uuid16 = 0x180A;
             ret = esp_ble_gatts_create_service(gatts_if_, &srvc_id, 10);
             if (ret != ESP_OK) {
-                ESP_LOGCONFIG(TAG, "[ERR] create DIS service failed: %s", esp_err_to_name(ret));
+                ESP_LOGI(TAG, "[ERR] create DIS service failed: %s", esp_err_to_name(ret));
             }
             creation_state_ = CreationState::STARTING_DIS_SERVICE;
             break;
