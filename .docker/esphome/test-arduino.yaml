@@ -1,6 +1,9 @@
 esphome:
   name: test-mouse-jiggler-arduino
   build_path: /builds/test-mouse-jiggler-arduino
+  # Pass custom options to PlatformIO to select the partition scheme
+  platformio_options:
+    board_build.partitions: /data/.docker/esphome/default_4MB.csv
 
 esp32:
   board: esp32dev

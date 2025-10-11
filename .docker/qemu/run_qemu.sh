@@ -27,17 +27,16 @@ FIRMWARE_PATH=$(find "$BUILD_DIR_PATH" -name "firmware.factory.bin" | head -n 1)
 
 if [ -z "$FIRMWARE_PATH" ]; then
     echo "Error: Final firmware file (firmware.factory.bin) not found in: $BUILD_DIR_PATH"
-    echo "--- DEBUG: Listing contents of current directory (/builds) ---"
-    ls -R .
-    echo "--- END DEBUG ---"
     exit 1
 fi
 
 echo "Found firmware for '$PROJECT_NAME' at: $FIRMWARE_PATH"
 echo "Starting QEMU..."
 
-# This assumes qemu-system-xtensa is in the PATH
+# Use if=mtd for the ESP32 machine type, as it expects a raw flash image.
 qemu-system-xtensa \
     -nographic \
     -machine esp32 \
-    -drive file="$FIRMWARE_PATH",if=pflash,format=raw
+    -drive file="$FIRMWARE_PATH",format=raw \
+    -d guest_errors,unimp,trace:all
+
