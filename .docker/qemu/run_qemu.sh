@@ -2,6 +2,15 @@
 
 set -e
 
+# Redirect all output to stderr to prevent QEMU from capturing stdout
+exec >&2
+
+echo
+echo "========================================="
+echo "--- Starting QEMU run script ---"
+echo "========================================="
+echo
+
 if [ -z "$1" ]; then
     echo "Error: Project name not provided."
     echo "Usage: $0 <project-name>"
