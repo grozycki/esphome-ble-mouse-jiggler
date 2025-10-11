@@ -21,6 +21,8 @@ enum class CreationState {
     ADDING_HID_REPORT_MAP_CHAR,
     ADDING_HID_CONTROL_POINT_CHAR,
     ADDING_HID_REPORT_CHAR,
+    ADDING_HID_REPORT_CCCD,          // NEW
+    ADDING_HID_REPORT_REFERENCE,     // NEW
     ADDING_PROTOCOL_MODE_CHAR,
     CREATING_BATTERY_SERVICE,
     STARTING_BATTERY_SERVICE,
@@ -55,6 +57,7 @@ public:
 
     static void initBluetooth();
     static SimpleBLEMouse* getMouseById(uint8_t mouse_id);
+    static void ensureAdvertising(); // NEW helper
 
 private:
     friend class BleMouseJiggler;
@@ -76,6 +79,7 @@ private:
 
     uint16_t hid_report_char_handle_;
     uint16_t battery_level_char_handle_;
+    uint16_t hid_report_cccd_handle_{0}; // NEW: store CCCD handle
 
     CreationState creation_state_;
 

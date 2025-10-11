@@ -138,6 +138,193 @@ void SimpleBLEMouse::begin() {
     }
 }
 
+void SimpleBLEMouse::execute_creation_step_() {
+    esp_err_t ret;
+    ESP_LOGD(TAG, "Executing creation step for state: %d", creation_state_);
+    switch (creation_state_) {
+        case CreationState::CREATING_HID_SERVICE: {
+            esp_gatt_srvc_id_t srvc_id = {{ESP_UUID_LEN_16, {0x1812}}, true};
+            // Increase attribute capacity for extra descriptors
+            ret = esp_ble_gatts_create_service(gatts_if_, &srvc_id, 20);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_create_service (HID) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::STARTING_HID_SERVICE;
+            break;
+        }
+        case CreationState::STARTING_HID_SERVICE:
+            ret = esp_ble_gatts_start_service(hid_service_handle_);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_start_service (HID) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::ADDING_HID_INFO_CHAR;
+            break;
+        case CreationState::ADDING_HID_INFO_CHAR: {
+            uint8_t hid_info[] = {0x11, 0x01, 0x00, 0x02};
+            esp_attr_value_t val = {sizeof(hid_info), sizeof(hid_info), hid_info};
+            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A4A}};
+            ret = esp_ble_gatts_add_char(hid_service_handle_, &uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &val, nullptr);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_add_char (HID Info) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::ADDING_HID_REPORT_MAP_CHAR;
+            break;
+        }
+        case CreationState::ADDING_HID_REPORT_MAP_CHAR: {
+            esp_attr_value_t val = {sizeof(hid_mouse_report_descriptor), sizeof(hid_mouse_report_descriptor), (uint8_t*)hid_mouse_report_descriptor};
+            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A4B}};
+            ret = esp_ble_gatts_add_char(hid_service_handle_, &uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &val, nullptr);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_add_char (HID Report Map) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::ADDING_HID_CONTROL_POINT_CHAR;
+            break;
+        }
+        case CreationState::ADDING_HID_CONTROL_POINT_CHAR: {
+            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A4C}};
+            ret = esp_ble_gatts_add_char(hid_service_handle_, &uuid, ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_WRITE_NR, nullptr, nullptr);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_add_char (HID Control Point) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::ADDING_HID_REPORT_CHAR;
+            break;
+        }
+        case CreationState::ADDING_HID_REPORT_CHAR: {
+            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A4D}};
+            ret = esp_ble_gatts_add_char(hid_service_handle_, &uuid,
+                                         ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+                                         ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY,
+                                         nullptr, nullptr);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_add_char (HID Report) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::ADDING_HID_REPORT_CCCD;
+            break;
+        }
+        case CreationState::ADDING_HID_REPORT_CCCD: {
+            // Add Client Characteristic Configuration Descriptor (CCCD) 0x2902
+            uint8_t cccd_val[] = {0x00, 0x00}; // notifications disabled by default
+            esp_attr_value_t val = {sizeof(cccd_val), sizeof(cccd_val), cccd_val};
+            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2902}};
+            ret = esp_ble_gatts_add_char_descr(hid_service_handle_, &uuid,
+                                               ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+                                               &val, nullptr);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_add_char_descr (CCCD) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::ADDING_HID_REPORT_REFERENCE;
+            break;
+        }
+        case CreationState::ADDING_HID_REPORT_REFERENCE: {
+            // Report Reference descriptor 0x2908: Report ID + Report Type (1 = Input)
+            uint8_t ref_val[] = {0x01, 0x01};
+            esp_attr_value_t val = {sizeof(ref_val), sizeof(ref_val), ref_val};
+            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2908}};
+            ret = esp_ble_gatts_add_char_descr(hid_service_handle_, &uuid, ESP_GATT_PERM_READ, &val, nullptr);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_add_char_descr (Report Reference) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::ADDING_PROTOCOL_MODE_CHAR;
+            break;
+        }
+        case CreationState::ADDING_PROTOCOL_MODE_CHAR: {
+            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A4E}};
+            uint8_t proto_mode[] = {0x01}; // Report Protocol
+            esp_attr_value_t val = {sizeof(proto_mode), sizeof(proto_mode), proto_mode};
+            ret = esp_ble_gatts_add_char(hid_service_handle_, &uuid,
+                                         ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+                                         ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE,
+                                         &val, nullptr);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_add_char (Protocol Mode) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::CREATING_BATTERY_SERVICE;
+            break;
+        }
+        case CreationState::CREATING_BATTERY_SERVICE: {
+            esp_gatt_srvc_id_t srvc_id = {{ESP_UUID_LEN_16, {0x180F}}, true};
+            ret = esp_ble_gatts_create_service(gatts_if_, &srvc_id, 4);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_create_service (Battery) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::STARTING_BATTERY_SERVICE;
+            break;
+        }
+        case CreationState::STARTING_BATTERY_SERVICE:
+            ret = esp_ble_gatts_start_service(battery_service_handle_);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_start_service (Battery) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::ADDING_BATTERY_LEVEL_CHAR;
+            break;
+        case CreationState::ADDING_BATTERY_LEVEL_CHAR: {
+            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A19}};
+            esp_attr_value_t val = {1, 1, &this->battery_level_};
+            ret = esp_ble_gatts_add_char(battery_service_handle_, &uuid, ESP_GATT_PERM_READ,
+                                         ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY, &val, nullptr);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_add_char (Battery Level) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::CREATING_DIS_SERVICE;
+            break;
+        }
+        case CreationState::CREATING_DIS_SERVICE: {
+            esp_gatt_srvc_id_t srvc_id = {{ESP_UUID_LEN_16, {0x180A}}, true};
+            ret = esp_ble_gatts_create_service(gatts_if_, &srvc_id, 10);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_create_service (DIS) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::STARTING_DIS_SERVICE;
+            break;
+        }
+        case CreationState::STARTING_DIS_SERVICE:
+            ret = esp_ble_gatts_start_service(dis_service_handle_);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_start_service (DIS) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::ADDING_DIS_MANUFACTURER_CHAR;
+            break;
+        case CreationState::ADDING_DIS_MANUFACTURER_CHAR: {
+            esp_attr_value_t val = {static_cast<uint16_t>(manufacturer_.length()), static_cast<uint16_t>(manufacturer_.length()), (uint8_t*)manufacturer_.c_str()};
+            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A29}};
+            ret = esp_ble_gatts_add_char(dis_service_handle_, &uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &val, nullptr);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_add_char (DIS Manufacturer) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::ADDING_DIS_MODEL_CHAR;
+            break;
+        }
+        case CreationState::ADDING_DIS_MODEL_CHAR: {
+            std::string model = "ESP32 BLE Mouse";
+            esp_attr_value_t val = {static_cast<uint16_t>(model.length()), static_cast<uint16_t>(model.length()), (uint8_t*)model.c_str()};
+            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A24}};
+            ret = esp_ble_gatts_add_char(dis_service_handle_, &uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &val, nullptr);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_add_char (DIS Model) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::ADDING_DIS_PNP_ID_CHAR;
+            break;
+        }
+        case CreationState::ADDING_DIS_PNP_ID_CHAR: {
+            esp_attr_value_t val = {sizeof(pnp_id), sizeof(pnp_id), (uint8_t*)pnp_id};
+            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A50}};
+            ret = esp_ble_gatts_add_char(dis_service_handle_, &uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &val, nullptr);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ble_gatts_add_char (DIS PnP ID) failed: %s", esp_err_to_name(ret));
+            }
+            creation_state_ = CreationState::DONE;
+            break;
+        }
+        case CreationState::DONE:
+            ESP_LOGI(TAG, "All services created (with HID descriptors), preparing advertising");
+            start_advertising_();
+            break;
+        default:
+            ESP_LOGW(TAG, "Unknown creation state: %d", creation_state_);
+            break;
+    }
+}
+
 void SimpleBLEMouse::gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param) {
     SimpleBLEMouse* mouse = nullptr;
     if (event == ESP_GATTS_REG_EVT) {
@@ -218,6 +405,31 @@ void SimpleBLEMouse::gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_i
             }
             break;
         }
+        case ESP_GATTS_ADD_CHAR_DESCR_EVT: {
+            ESP_LOGD(TAG, "ADD_CHAR_DESCR_EVT status=%d handle=%d", param->add_char_descr.status, param->add_char_descr.attr_handle);
+            if (param->add_char_descr.status == ESP_GATT_OK) {
+                if (mouse->creation_state_ == CreationState::ADDING_HID_REPORT_CCCD) {
+                    mouse->hid_report_cccd_handle_ = param->add_char_descr.attr_handle; // store CCCD handle
+                    mouse->creation_state_ = CreationState::ADDING_HID_REPORT_REFERENCE;
+                } else if (mouse->creation_state_ == CreationState::ADDING_HID_REPORT_REFERENCE) {
+                    // Report Reference added, proceed to Protocol Mode
+                    mouse->creation_state_ = CreationState::ADDING_PROTOCOL_MODE_CHAR;
+                }
+                mouse->execute_creation_step_();
+            } else {
+                ESP_LOGE(TAG, "Descriptor add failed state %d status %d", mouse->creation_state_, param->add_char_descr.status);
+            }
+            break;
+        }
+        case ESP_GATTS_WRITE_EVT: {
+            if (param->write.handle == mouse->hid_report_cccd_handle_) {
+                if (param->write.len >= 2) {
+                    uint16_t cccd = param->write.value[0] | (param->write.value[1] << 8);
+                    ESP_LOGI(TAG, "CCCD updated: 0x%04X (notifications %s)", cccd, (cccd & 0x0001) ? "ENABLED" : "DISABLED");
+                }
+            }
+            break;
+        }
         case ESP_GATTS_CONNECT_EVT: {
             mouse->connected_ = true;
             mouse->conn_id_ = param->connect.conn_id;
@@ -236,157 +448,6 @@ void SimpleBLEMouse::gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_i
         }
         default:
             ESP_LOGD(TAG, "Unhandled GATTS_EVENT: %d", event);
-            break;
-    }
-}
-
-void SimpleBLEMouse::execute_creation_step_() {
-    esp_err_t ret;
-    ESP_LOGD(TAG, "Executing creation step for state: %d", creation_state_);
-    switch (creation_state_) {
-        case CreationState::CREATING_HID_SERVICE: {
-            esp_gatt_srvc_id_t srvc_id = {{ESP_UUID_LEN_16, {0x1812}}, true};
-            ret = esp_ble_gatts_create_service(gatts_if_, &srvc_id, 16);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_create_service (HID) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::STARTING_HID_SERVICE;
-            break;
-        }
-        case CreationState::STARTING_HID_SERVICE:
-            ret = esp_ble_gatts_start_service(hid_service_handle_);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_start_service (HID) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::ADDING_HID_INFO_CHAR;
-            break;
-        case CreationState::ADDING_HID_INFO_CHAR: {
-            uint8_t hid_info[] = {0x11, 0x01, 0x00, 0x02};
-            esp_attr_value_t val = {sizeof(hid_info), sizeof(hid_info), hid_info};
-            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A4A}};
-            ret = esp_ble_gatts_add_char(hid_service_handle_, &uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &val, nullptr);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_add_char (HID Info) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::ADDING_HID_REPORT_MAP_CHAR;
-            break;
-        }
-        case CreationState::ADDING_HID_REPORT_MAP_CHAR: {
-            esp_attr_value_t val = {sizeof(hid_mouse_report_descriptor), sizeof(hid_mouse_report_descriptor), (uint8_t*)hid_mouse_report_descriptor};
-            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A4B}};
-            ret = esp_ble_gatts_add_char(hid_service_handle_, &uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &val, nullptr);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_add_char (HID Report Map) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::ADDING_HID_CONTROL_POINT_CHAR;
-            break;
-        }
-        case CreationState::ADDING_HID_CONTROL_POINT_CHAR: {
-            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A4C}};
-            ret = esp_ble_gatts_add_char(hid_service_handle_, &uuid, ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_WRITE_NR, nullptr, nullptr);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_add_char (HID Control Point) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::ADDING_HID_REPORT_CHAR;
-            break;
-        }
-        case CreationState::ADDING_HID_REPORT_CHAR: {
-            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A4D}};
-            ret = esp_ble_gatts_add_char(hid_service_handle_, &uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY, nullptr, nullptr);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_add_char (HID Report) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::ADDING_PROTOCOL_MODE_CHAR;
-            break;
-        }
-        case CreationState::ADDING_PROTOCOL_MODE_CHAR: {
-            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A4E}};
-            ret = esp_ble_gatts_add_char(hid_service_handle_, &uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE, nullptr, nullptr);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_add_char (Protocol Mode) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::CREATING_BATTERY_SERVICE;
-            break;
-        }
-        case CreationState::CREATING_BATTERY_SERVICE: {
-            esp_gatt_srvc_id_t srvc_id = {{ESP_UUID_LEN_16, {0x180F}}, true};
-            ret = esp_ble_gatts_create_service(gatts_if_, &srvc_id, 4);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_create_service (Battery) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::STARTING_BATTERY_SERVICE;
-            break;
-        }
-        case CreationState::STARTING_BATTERY_SERVICE:
-            ret = esp_ble_gatts_start_service(battery_service_handle_);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_start_service (Battery) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::ADDING_BATTERY_LEVEL_CHAR;
-            break;
-        case CreationState::ADDING_BATTERY_LEVEL_CHAR: {
-            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A19}};
-            esp_attr_value_t val = {1, 1, &this->battery_level_};
-            ret = esp_ble_gatts_add_char(battery_service_handle_, &uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY, &val, nullptr);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_add_char (Battery Level) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::CREATING_DIS_SERVICE;
-            break;
-        }
-        case CreationState::CREATING_DIS_SERVICE: {
-            esp_gatt_srvc_id_t srvc_id = {{ESP_UUID_LEN_16, {0x180A}}, true};
-            ret = esp_ble_gatts_create_service(gatts_if_, &srvc_id, 10);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_create_service (DIS) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::STARTING_DIS_SERVICE;
-            break;
-        }
-        case CreationState::STARTING_DIS_SERVICE:
-            ret = esp_ble_gatts_start_service(dis_service_handle_);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_start_service (DIS) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::ADDING_DIS_MANUFACTURER_CHAR;
-            break;
-        case CreationState::ADDING_DIS_MANUFACTURER_CHAR: {
-            esp_attr_value_t val = {static_cast<uint16_t>(manufacturer_.length()), static_cast<uint16_t>(manufacturer_.length()), (uint8_t*)manufacturer_.c_str()};
-            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A29}};
-            ret = esp_ble_gatts_add_char(dis_service_handle_, &uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &val, nullptr);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_add_char (DIS Manufacturer) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::ADDING_DIS_MODEL_CHAR;
-            break;
-        }
-        case CreationState::ADDING_DIS_MODEL_CHAR: {
-            std::string model = "ESP32 BLE Mouse";
-            esp_attr_value_t val = {static_cast<uint16_t>(model.length()), static_cast<uint16_t>(model.length()), (uint8_t*)model.c_str()};
-            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A24}};
-            ret = esp_ble_gatts_add_char(dis_service_handle_, &uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &val, nullptr);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_add_char (DIS Model) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::ADDING_DIS_PNP_ID_CHAR;
-            break;
-        }
-        case CreationState::ADDING_DIS_PNP_ID_CHAR: {
-            esp_attr_value_t val = {sizeof(pnp_id), sizeof(pnp_id), (uint8_t*)pnp_id};
-            esp_bt_uuid_t uuid = {ESP_UUID_LEN_16, {.uuid16 = 0x2A50}};
-            ret = esp_ble_gatts_add_char(dis_service_handle_, &uuid, ESP_GATT_PERM_READ, ESP_GATT_CHAR_PROP_BIT_READ, &val, nullptr);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "esp_ble_gatts_add_char (DIS PnP ID) failed: %s", esp_err_to_name(ret));
-            }
-            creation_state_ = CreationState::DONE;
-            break;
-        }
-        case CreationState::DONE:
-            ESP_LOGI(TAG, "All services created, preparing advertising");
-            start_advertising_();
-            break;
-        default:
-            ESP_LOGW(TAG, "Unknown creation state: %d", creation_state_);
             break;
     }
 }
@@ -439,6 +500,7 @@ void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_ga
                     adv_params_.adv_int_max = 0x40;
                     adv_params_.adv_type = ADV_TYPE_IND;
                     adv_params_.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
+                    adv_params_.channel_map = ADV_CHNL_ALL; // ensure all channels
                     adv_params_.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
                 }
                 esp_err_t ret = esp_ble_gap_start_advertising(&adv_params_);
@@ -515,5 +577,24 @@ void SimpleBLEMouse::release(uint8_t b) { uint8_t report[4] = {0, 0, 0, 0}; send
 bool SimpleBLEMouse::isConnected() { return connected_; }
 void SimpleBLEMouse::end() { ESP_LOGI(TAG, "Mouse %d ended.", mouse_id_); }
 SimpleBLEMouse* SimpleBLEMouse::getMouseById(uint8_t id) { auto it = mice_instances_.find(id); return (it != mice_instances_.end()) ? it->second : nullptr; }
+
+void SimpleBLEMouse::ensureAdvertising() {
+    if (!bluetooth_initialized_) return;
+    // Only manage first active instance for now
+    auto it = mice_instances_.find(0);
+    if (it == mice_instances_.end()) return;
+    SimpleBLEMouse* m = it->second;
+    if (!m) return;
+    if (!m->connected_ && adv_data_configured_ && !advertising_active_) {
+        ESP_LOGW(TAG, "Advertising was stopped unexpectedly. Restarting...");
+        esp_err_t ret = esp_ble_gap_start_advertising(&adv_params_);
+        if (ret == ESP_OK) {
+            advertising_active_ = true;
+            ESP_LOGI(TAG, "Advertising re-started.");
+        } else {
+            ESP_LOGE(TAG, "Failed to restart advertising: %s", esp_err_to_name(ret));
+        }
+    }
+}
 
 #endif // USE_ESP32

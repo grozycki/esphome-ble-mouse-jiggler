@@ -28,6 +28,9 @@ void BleMouseJiggler::setup() {
 }
 
 void BleMouseJiggler::loop() {
+    // Ensure advertising is active if not connected yet
+    SimpleBLEMouse::ensureAdvertising();
+
     if (this->jiggling_enabled_ && this->ble_mouse_ && this->ble_mouse_->isConnected()) {
         if (millis() - this->last_jiggle_time_ >= this->jiggle_interval_) {
             this->jiggle_mouse_();
