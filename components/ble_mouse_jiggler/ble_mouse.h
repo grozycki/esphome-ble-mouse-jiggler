@@ -2,6 +2,7 @@
 
 #include "esphome/core/component.h"
 #include "esphome/core/automation.h"
+#include "esphome/components/esp32_ble/ble.h"
 #include "esphome/components/esp32_ble_server/ble_server.h"
 
 #ifdef USE_ESP32
@@ -9,7 +10,7 @@
 namespace esphome {
 namespace ble_mouse_jiggler {
 
-class BleMouseJiggler : public Component, public esp32_ble_server::BLEServerCallbacks {
+class BleMouseJiggler : public Component, public esp32_ble::GATTsEventHandler {
  public:
   BleMouseJiggler(esp32_ble_server::BLEServer *hub) : hub_(hub) {}
 
@@ -17,8 +18,7 @@ class BleMouseJiggler : public Component, public esp32_ble_server::BLEServerCall
   void loop() override;
   void dump_config() override;
 
-  void on_connect(esp32_ble_server::BLEServer *server) override;
-  void on_disconnect(esp32_ble_server::BLEServer *server) override;
+  void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param) override;
 
   void set_device_name(const std::string &name) { this->device_name_ = name; }
   void set_manufacturer(const std::string &manufacturer) { this->manufacturer_ = manufacturer; }

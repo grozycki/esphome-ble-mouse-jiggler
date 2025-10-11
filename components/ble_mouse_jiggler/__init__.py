@@ -1,7 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import automation
-from esphome.components import esp32_ble_server
+from esphome.components import esp32_ble_server, esp32_ble
 from esphome.const import (
     CONF_ID,
     CONF_NAME,
@@ -17,7 +17,7 @@ CONF_JIGGLE_DISTANCE = "jiggle_distance"
 CONF_BLE_SERVER_ID = "ble_server_id"
 
 ble_mouse_jiggler_ns = cg.esphome_ns.namespace("ble_mouse_jiggler")
-BleMouseJiggler = ble_mouse_jiggler_ns.class_("BleMouseJiggler", cg.Component)
+BleMouseJiggler = ble_mouse_jiggler_ns.class_("BleMouseJiggler", cg.Component, esp32_ble.GATTsEventHandler)
 
 StartJigglingAction = ble_mouse_jiggler_ns.class_("StartJigglingAction", automation.Action)
 StopJigglingAction = ble_mouse_jiggler_ns.class_("StopJigglingAction", automation.Action)
@@ -44,6 +44,13 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID], hub)
     await cg.register_component(var, config)
 
+    # Workaround for codegen bug in this ESPHome version
+    # hub.get_parent() returns a pointer, but codegen incorrectly uses '.' instead of '->'
+    # We must use RawExpression to force the correct C++ syntax.
+    parent_expr = f"{hub}->get_parent()"
+    cg.add(cg.RawExpression(f"{parent_expr}->register_gatts_event_handler({var})"))
+
+    # Set component-specific configuration
     cg.add(var.set_device_name(config[CONF_NAME]))
     cg.add(var.set_manufacturer(config[CONF_MANUFACTURER]))
     cg.add(var.set_battery_level(config[CONF_BATTERY_LEVEL]))
