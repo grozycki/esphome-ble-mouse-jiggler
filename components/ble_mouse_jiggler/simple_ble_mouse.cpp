@@ -5,6 +5,20 @@
 #include <string>
 #include "esp_log.h"
 #include <string.h>
+#include "nvs_flash.h"
+#include "esp_system.h"
+
+// Replace previous fallback random filler (used esp_random) with LFSR-based filler independent of esp_random
+static void _fallback_fill_random(uint8_t *dst, size_t len) {
+    uint32_t lfsr = 0xA5A55A5Au; // seed
+    for (size_t i = 0; i < len; ++i) {
+        // 32-bit Galois LFSR tap mask
+        uint32_t lsb = lfsr & 1u;
+        lfsr >>= 1;
+        if (lsb) lfsr ^= 0xD0000001u;
+        dst[i] = static_cast<uint8_t>(lfsr & 0xFFu);
+    }
+}
 
 static const char* TAG = "SimpleBLEMouse";
 
@@ -66,14 +80,25 @@ void SimpleBLEMouse::initBluetooth() {
         ESP_LOGD(TAG, "Bluetooth already initialized.");
         return;
     }
-    ESP_LOGI(TAG, "Initializing Bluetooth controller & stack");
-    esp_err_t ret;
+    ESP_LOGI(TAG, "[INIT] Starting full BLE init sequence");
 
-    // Release classic BT memory (we only need BLE)
+    // Initialize NVS (required for bonding)
+    esp_err_t ret_nvs = nvs_flash_init();
+    if (ret_nvs == ESP_ERR_NVS_NO_FREE_PAGES || ret_nvs == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "NVS partition truncated or new version, erasing...");
+        nvs_flash_erase();
+        ret_nvs = nvs_flash_init();
+    }
+    if (ret_nvs != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to init NVS: %s", esp_err_to_name(ret_nvs));
+    }
+
+    ESP_LOGI(TAG, "Releasing Classic BT memory");
     esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
 
+    ESP_LOGI(TAG, "Initializing BT controller");
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    ret = esp_bt_controller_init(&bt_cfg);
+    esp_err_t ret = esp_bt_controller_init(&bt_cfg);
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         ESP_LOGE(TAG, "esp_bt_controller_init failed: %s", esp_err_to_name(ret));
         return;
@@ -83,6 +108,8 @@ void SimpleBLEMouse::initBluetooth() {
         ESP_LOGE(TAG, "esp_bt_controller_enable failed: %s", esp_err_to_name(ret));
         return;
     }
+
+    ESP_LOGI(TAG, "Initializing Bluedroid");
     ret = esp_bluedroid_init();
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         ESP_LOGE(TAG, "esp_bluedroid_init failed: %s", esp_err_to_name(ret));
@@ -94,6 +121,26 @@ void SimpleBLEMouse::initBluetooth() {
         return;
     }
 
+    // Clear existing bonds (helps when device cached as different profile)
+    int dev_num = esp_ble_get_bond_device_num();
+    if (dev_num > 0) {
+        ESP_LOGW(TAG, "Removing %d bonded device(s) to avoid stale pairing", dev_num);
+        esp_ble_bond_dev_t *bonded = (esp_ble_bond_dev_t*)malloc(sizeof(esp_ble_bond_dev_t) * dev_num);
+        if (bonded) {
+            if (esp_ble_get_bond_device_list(&dev_num, bonded) == ESP_OK) {
+                for (int i = 0; i < dev_num; ++i) {
+                    esp_ble_remove_bond_device(bonded[i].bd_addr);
+                }
+            }
+            free(bonded);
+        }
+    }
+
+    // NOTE: Random static address disabled for Arduino / esp32_ble coexistence issues.
+    // If you remove esp32_ble from YAML you can re-enable custom random address generation.
+    // (Previous code using _fallback_fill_random and esp_ble_gap_set_rand_addr removed here.)
+
+    ESP_LOGI(TAG, "Registering GATTS & GAP callbacks");
     ret = esp_ble_gatts_register_callback(gatts_event_handler_);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "esp_ble_gatts_register_callback failed: %s", esp_err_to_name(ret));
@@ -105,7 +152,7 @@ void SimpleBLEMouse::initBluetooth() {
         return;
     }
 
-    // Basic security (optional PIN not yet wired)
+    ESP_LOGI(TAG, "Configuring basic security");
     esp_ble_auth_req_t auth_req = ESP_LE_AUTH_BOND;
     esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;
     uint8_t key_size = 16;
@@ -118,7 +165,7 @@ void SimpleBLEMouse::initBluetooth() {
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(rsp_key));
 
     bluetooth_initialized_ = true;
-    ESP_LOGD(TAG, "Bluetooth initialized successfully.");
+    ESP_LOGI(TAG, "[INIT] BLE stack ready");
 }
 
 void SimpleBLEMouse::begin() {
@@ -140,7 +187,7 @@ void SimpleBLEMouse::begin() {
 
 void SimpleBLEMouse::execute_creation_step_() {
     esp_err_t ret;
-    ESP_LOGD(TAG, "Executing creation step for state: %d", creation_state_);
+    ESP_LOGI(TAG, "State progress: %d", creation_state_); // was DEBUG
     switch (creation_state_) {
         case CreationState::CREATING_HID_SERVICE: {
             esp_gatt_srvc_id_t srvc_id = {{ESP_UUID_LEN_16, {0x1812}}, true};
@@ -487,10 +534,10 @@ void SimpleBLEMouse::start_advertising_() {
 }
 
 void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param) {
-    ESP_LOGD(TAG, "GAP_EVENT: %d", event);
+    ESP_LOGI(TAG, "GAP event: %d", event); // was DEBUG
     switch (event) {
         case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT: {
-            ESP_LOGD(TAG, "ADV_DATA_SET_COMPLETE_EVT status: %d", param->adv_data_cmpl.status);
+            ESP_LOGI(TAG, "ADV data set complete status: %d", param->adv_data_cmpl.status); // was DEBUG
             if (param->adv_data_cmpl.status == ESP_BT_STATUS_SUCCESS) {
                 adv_data_configured_ = true;
                 // Prepare advertising parameters if first time
@@ -516,10 +563,10 @@ void SimpleBLEMouse::gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_ga
             break;
         }
         case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
-            ESP_LOGD(TAG, "ADV_START_COMPLETE_EVT status: %d", param->adv_start_cmpl.status);
+            ESP_LOGI(TAG, "ADV start complete status: %d", param->adv_start_cmpl.status); // was DEBUG
             break;
         case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
-            ESP_LOGD(TAG, "ADV_STOP_COMPLETE_EVT status: %d", param->adv_stop_cmpl.status);
+            ESP_LOGI(TAG, "ADV stop complete status: %d", param->adv_stop_cmpl.status); // was DEBUG
             advertising_active_ = false;
             break;
         case ESP_GAP_BLE_SEC_REQ_EVT: {
