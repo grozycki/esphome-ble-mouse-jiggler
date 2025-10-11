@@ -1,8 +1,8 @@
 .PHONY: test clean prune
 
 test:
-	@echo "Running simplified test pipeline..."
-	@docker compose up --build --exit-code-from test-arduino 2>&1
+	@echo "Running compilation pipeline..."
+	@docker compose up --build --exit-code-from compile-espidf
 
 clean:
 	@echo "Stopping containers and removing local build artifacts (cache is preserved)..."

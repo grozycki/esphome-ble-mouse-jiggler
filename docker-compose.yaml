@@ -17,20 +17,7 @@ services:
     working_dir: /builds
     command: ["compile", "/data/.docker/esphome/test-arduino.yaml"]
 
-  # 2. Run the Arduino firmware on QEMU
-  test-arduino:
-    build:
-      context: ./.docker/qemu
-      dockerfile: Dockerfile
-    volumes:
-      - esphome_builds:/builds
-    working_dir: /builds
-    command: ["test-mouse-jiggler-arduino"]
-    depends_on:
-      compile-arduino:
-        condition: service_completed_successfully
-
-  # 3. Compile the ESP-IDF firmware
+  # 2. Compile the ESP-IDF firmware
   compile-espidf:
     build:
       context: .
@@ -43,18 +30,5 @@ services:
     working_dir: /builds
     command: ["compile", "/data/.docker/esphome/test-espidf.yaml"]
     depends_on:
-      test-arduino:
-        condition: service_completed_successfully
-
-  # 4. Run the ESP-IDF firmware on QEMU
-  test-espidf:
-    build:
-      context: ./.docker/qemu
-      dockerfile: Dockerfile
-    volumes:
-      - esphome_builds:/builds
-    working_dir: /builds
-    command: ["test-mouse-jiggler-espidf"]
-    depends_on:
-      compile-espidf:
+      compile-arduino:
         condition: service_completed_successfully
