@@ -1,481 +1,108 @@
 # ESPHome BLE Mouse Jiggler
 
-An ESPHome component for automatic mouse cursor "jiggling" via Bluetooth Low Energy on ESP32. **Supports multiple virtual mice on a single ESP32 with optional PIN security!**
+An ESPHome component that turns an ESP32 into a Bluetooth Low Energy (BLE) mouse, automatically "jiggling" the cursor to prevent the host computer from going to sleep or idle.
+
+This component integrates with the official ESPHome `esp32_ble_server` to create a standard HID mouse device.
 
 ## Features
 
-- 🖱️ **Virtual BLE Mouse** - ESP32 presents itself as a Bluetooth mouse
-- ⚡ **Automatic Jiggling** - Subtle cursor movement at regular intervals
-- 🔒 **PIN Code Security** - Optional PIN protection for secure pairing
-- 🛡️ **Full HID Service** - Complete Human Interface Device implementation
-- 🔧 **Configurable Parameters** - Interval, distance, device name customization
-- 🎯 **ESPHome Integration** - Full automation and action support
-- 📱 **Universal Compatibility** - Works with Windows, macOS, Linux
-- 🚀 **Easy Setup** - Enhanced BLE implementation with proper HID service
-- 🖱️🖱️ **Multiple Mice Support** - Create up to multiple virtual mice on one ESP32
-- 🔄 **Auto ID Assignment** - No need to manually manage mouse IDs
+- 🖱️ **Virtual BLE Mouse** - ESP32 presents itself as a standard Bluetooth HID mouse.
+- ⚡ **Automatic Jiggling** - Moves the cursor at regular intervals to simulate user activity.
+- 🔧 **Configurable** - Customize the jiggle interval and movement distance.
+- 🎯 **ESPHome Integration** - Control jiggling with ESPHome automations (`start`, `stop`, `jiggle_once`).
+- 🔋 **Battery Reporting** - Reports a configurable battery level to the host.
+- 📱 **Universal Compatibility** - Works with Windows, macOS, Linux, and other BLE-compatible systems.
 
-## Testing Environment
+## Installation & Configuration
 
-This project includes a local testing environment based on Docker and `docker-compose`. This setup allows you to compile the firmware and run it in a QEMU virtual machine, all within Docker containers.
+This component requires the `esp32_ble_server` to be enabled in your configuration. The jiggler component then attaches to this server.
 
-### Dependencies
-
-- **Docker & Docker Compose**: The only requirement is a working installation of Docker and Docker Compose. [Install Docker](https://docs.docker.com/get-docker/)
-
-### Running Tests
-
-To run the entire test pipeline, execute the following command:
-
-```sh
-make test
-```
-
-This command uses `docker-compose` to:
-1.  Build a container with ESPHome and compile the firmware.
-2.  Build a container with QEMU.
-3.  Run the compiled firmware in the QEMU container.
-
-To clean up the environment (stop and remove containers, delete build artifacts), run:
-
-```sh
-make clean
-```
-
-## Installation
-
-Add the component to your ESPHome configuration:
+**Example `your_config.yaml`:**
 
 ```yaml
-# Required: Enable ESP32 BLE support
-esp32_ble:
+esphome:
+  name: test-mouse-jiggler-arduino
 
-external_components:
-  - source: github://grozycki/esphome-ble-mouse-jiggler@main
-    components:
-      - ble_mouse_jiggler
-
-# Single mouse configuration
-ble_mouse_jiggler:
-  id: my_mouse_jiggler
-  device_name: "ESP32 Mouse Jiggler"
+# 1. Enable the ESP32 BLE Server
+# This creates the main BLE hub for your device.
+# The name set here will be the advertised Bluetooth name.
+esp32_ble_server:
+  id: ble_server_hub
   manufacturer: "ESPHome"
-  battery_level: 100
-  jiggle_interval: 60s
-  jiggle_distance: 1
-```
+  name: "ESP32 Jiggler"
 
-## Secure Configuration with PIN
-
-Protect your mouse jiggler with a PIN code to prevent unauthorized connections:
-
-```yaml
-# Secure mouse configuration
-ble_mouse_jiggler:
-  id: secure_mouse
-  device_name: "Secure Mouse Jiggler"
-  manufacturer: "ESPHome"
-  pin_code: "123456"  # 6-digit PIN code
-  battery_level: 100
-  jiggle_interval: 60s
-  jiggle_distance: 1
-```
-
-## Multiple Mice Configuration
-
-Create multiple virtual mice with different names and settings:
-
-```yaml
-# Required: Enable ESP32 BLE support
-esp32_ble:
-
+# 2. Add the external component
 external_components:
-  - source: github://grozycki/esphome-ble-mouse-jiggler@main
-    components:
-      - ble_mouse_jiggler
+  - source:
+      type: local
+      path: /data/components
+    # Or using GitHub:
+    # source: github://grozycki/esphome-ble-mouse-jiggler@main
 
-# Multiple mice configuration using list syntax
+# 3. Configure the mouse jiggler
+# This links the jiggler logic to the BLE server created above.
 ble_mouse_jiggler:
-  # First mouse - for work (with PIN security)
-  - id: work_mouse
-    device_name: "Work Mouse Jiggler"
-    manufacturer: "ESPHome Work"
-    pin_code: "654321"
-    jiggle_interval: 30s
-    jiggle_distance: 1
-
-  # Second mouse - for gaming (no PIN)
-  - id: gaming_mouse
-    device_name: "Gaming Mouse Jiggler"
-    manufacturer: "ESPHome Gaming"
-    jiggle_interval: 120s
-    jiggle_distance: 2
-
-  # Third mouse - for presentations (with PIN)
-  - id: presentation_mouse
-    device_name: "Presentation Helper"
-    manufacturer: "ESPHome"
-    pin_code: "987654"
-    jiggle_interval: 300s
-    jiggle_distance: 1
+  id: my_mouse # Give it an ID for automations
+  ble_server_id: ble_server_hub
+  battery_level: 99
+  jiggle_interval: 45s
+  jiggle_distance: 2
 ```
 
 ## Configuration Parameters
 
-- `id` (required): ESPHome component ID for automations
-- `device_name` (optional): BLE device name (default: "ESP32 Mouse Jiggler")
-- `manufacturer` (optional): Manufacturer name (default: "ESPHome")
-- `pin_code` (optional): 6-digit PIN code for secure pairing (default: none)
-- `battery_level` (optional): Battery level 0-100% (default: 100)
-- `jiggle_interval` (optional): Interval between movements (default: 60s)
-- `jiggle_distance` (optional): Movement distance in pixels 1-10 (default: 1)
-
-*Note: `mouse_id` is automatically assigned - no need to specify manually!*
-
-## Security Features
-
-### PIN Code Protection
-
-When you set a `pin_code`, the device:
-- Requires PIN entry during Bluetooth pairing
-- Rejects connection attempts without correct PIN
-- Uses BLE encryption and bonding
-- Logs pairing attempts for security monitoring
-
-### Security Modes
-
-- **No PIN**: Any device can connect (default behavior)
-- **With PIN**: Only devices with correct PIN can pair
-
-## Device Pairing
-
-### Windows
-1. Open Settings → Bluetooth & devices
-2. Click "Add device"
-3. Select your ESP32 Mouse Jiggler from the list
-4. Enter PIN code if prompted
-
-### macOS
-1. System Preferences → Bluetooth
-2. Click on the device in the list
-3. Enter PIN code if required
-
-### Linux
-```bash
-bluetoothctl
-scan on
-pair XX:XX:XX:XX:XX:XX
-# Enter PIN when prompted
-connect XX:XX:XX:XX:XX:XX
-```
+- `id` (optional): An ID for the component so you can control it from automations.
+- `ble_server_id` (**Required**): The ID of the `esp32_ble_server` component to attach to.
+- `manufacturer` (optional): The manufacturer name reported in the Device Information Service. Defaults to `ESPHome`.
+- `battery_level` (optional): The battery level (0-100%) to report to the host. Defaults to `100`.
+- `jiggle_interval` (optional): The time between each jiggle movement. Defaults to `60s`.
+- `jiggle_distance` (optional): The maximum movement distance in pixels (1-10). Defaults to `1`.
 
 ## Automations
 
-The component provides actions for controlling jiggling behavior of each mouse independently:
+The component provides actions to control the jiggling behavior from your ESPHome automations.
+
+### Available Actions
+
+- `ble_mouse_jiggler.start`: Starts the automatic jiggling. Requires the component `id`.
+- `ble_mouse_jiggler.stop`: Stops the automatic jiggling. Requires the component `id`.
+- `ble_mouse_jiggler.jiggle_once`: Performs a single, immediate jiggle movement. Requires the component `id`.
+
+### Example Automation
+
+This example uses a button to start and stop the jiggling.
 
 ```yaml
-# Example automations for multiple mice
-automation:
-  # Work mouse schedule
-  - alias: "Start work mouse at 9 AM"
-    trigger:
-      platform: time
-      at: "09:00:00"
-    action:
-      - ble_mouse_jiggler.start:
-          id: work_mouse
-
-  - alias: "Stop work mouse at 5 PM"
-    trigger:
-      platform: time
-      at: "17:00:00"
-    action:
-      - ble_mouse_jiggler.stop:
-          id: work_mouse
-
-  # Gaming mouse schedule
-  - alias: "Start gaming mouse at 6 PM"
-    trigger:
-      platform: time
-      at: "18:00:00"
-    action:
-      - ble_mouse_jiggler.start:
-          id: gaming_mouse
-
-  # Manual control with PIN security
-  - alias: "Emergency jiggle on button press"
-    trigger:
-      platform: gpio
-      pin: GPIO0
-      on_press:
-    action:
-      - ble_mouse_jiggler.jiggle_once:
-          id: work_mouse
+binary_sensor:
+  - platform: gpio
+    pin: GPIO0
+    name: "Jiggler Toggle Button"
+    on_press:
+      - ble_mouse_jiggler.start: my_mouse
+    on_release:
+      - ble_mouse_jiggler.stop: my_mouse
 ```
-
-## Available Actions
-
-- `ble_mouse_jiggler.start` - Start automatic jiggling for specified mouse
-- `ble_mouse_jiggler.stop` - Stop automatic jiggling for specified mouse
-- `ble_mouse_jiggler.jiggle_once` - Perform single mouse movement for specified mouse
-
-## Home Assistant Integration
-
-The component automatically exposes actions as services in Home Assistant through the ESPHome API:
-
-### Available Actions in Home Assistant
-
-ESPHome automatically creates services for component actions:
-
-- `ble_mouse_jiggler.start` - Start automatic jiggling for specified mouse
-- `ble_mouse_jiggler.stop` - Stop automatic jiggling for specified mouse
-- `ble_mouse_jiggler.jiggle_once` - Perform single mouse movement for specified mouse
-
-### Using Actions in Home Assistant
-
-You can call these actions from Home Assistant automations, scripts, or manually:
-
-```yaml
-# Configuration with multiple mice
-ble_mouse_jiggler:
-  - id: work_mouse
-    device_name: "Work Mouse Jiggler"
-  - id: gaming_mouse
-    device_name: "Gaming Mouse Jiggler"
-
-# Home Assistant automation example - controlling specific mice
-automation:
-  - alias: "Start work mouse during work hours"
-    trigger:
-      platform: time
-      at: "09:00:00"
-    action:
-      service: ble_mouse_jiggler.start
-      data:
-        id: work_mouse
-
-  - alias: "Start gaming mouse in evening"
-    trigger:
-      platform: time
-      at: "18:00:00"
-    action:
-      service: ble_mouse_jiggler.start
-      data:
-        id: gaming_mouse
-
-  - alias: "Stop all mice at night"
-    trigger:
-      platform: time
-      at: "23:00:00"
-    action:
-      - service: ble_mouse_jiggler.stop
-        data:
-          id: work_mouse
-      - service: ble_mouse_jiggler.stop
-        data:
-          id: gaming_mouse
-
-# Manual service calls for specific mice
-script:
-  work_mouse_jiggle:
-    sequence:
-      - service: ble_mouse_jiggler.jiggle_once
-        data:
-          id: work_mouse
-
-  gaming_mouse_jiggle:
-    sequence:
-      - service: ble_mouse_jiggler.jiggle_once
-        data:
-          id: gaming_mouse
-```
-
-### Service Discovery
-
-Actions appear automatically in Home Assistant under **Developer Tools > Services** as `ble_mouse_jiggler.*` services. You specify which mouse to control using the `id` parameter in the service data.
-
-## Hardware Requirements
-
-- **ESP32** (not ESP8266) - Required for Bluetooth support
-- **ESPHome 2023.5.0+**
-
-## How It Works
-
-The component:
-1. Initializes multiple virtual BLE mice on ESP32 (shared Bluetooth stack)
-2. Each mouse operates independently with its own:
-   - Device name and advertising
-   - Connection status
-   - Jiggling schedule and parameters
-3. At regular intervals, each connected mouse performs subtle movement
-4. Movement is very small (1-2 pixels) and immediately reversed, so cursor stays in place
-5. Simulates user activity, preventing screen savers and idle timeouts
-
-## Use Cases for Multiple Mice
-
-- **Work + Personal** - Different schedules for work and personal computers
-- **Different Applications** - Work mouse (frequent jiggling) vs Gaming mouse (rare jiggling)
-- **Multiple Devices** - Connect each mouse to different computers/devices
-- **Redundancy** - Backup mice in case one disconnects
-- **Specialized Settings** - Different jiggle patterns for different purposes
-
-## Technical Implementation
-
-- Uses enhanced ESP32 BLE stack with multiple GATT applications
-- Automatically downloads required dependencies via PlatformIO
-- Clean, minimal codebase with multi-instance architecture
-- Full ESPHome component integration with independent automation support
-- Static Bluetooth management for efficient resource usage
 
 ## Project Structure
 
+The current project structure is clean and relies on the native ESPHome BLE server.
+
 ```
 components/ble_mouse_jiggler/
-├── CMakeLists.txt              # Build configuration
-├── __init__.py                 # ESPHome Python integration (auto mouse_id)
-├── ble_mouse.cpp               # Main C++ implementation
-├── ble_mouse.h                 # C++ header file
-├── simple_ble_mouse.cpp        # Multi-instance BLE mouse implementation
-└── simple_ble_mouse.h          # Enhanced BLE mouse API
+├── CMakeLists.txt      # Build configuration
+├── __init__.py         # ESPHome Python integration
+├── ble_mouse.cpp       # Main C++ implementation
+└── ble_mouse.h         # C++ header file
 ```
 
-## Limitations
+## How It Works
 
-- **ESP32 BLE connections limit**: Typically 3-4 simultaneous connections
-- **Memory usage**: Each mouse instance uses additional RAM
-- **Advertising conflicts**: All mice advertise simultaneously (managed automatically)
+The component integrates with the official `esp32_ble_server` in ESPHome. It creates the necessary BLE services (Human Interface Device, Battery Service, Device Information) and characteristics to present the ESP32 as a standard Bluetooth mouse. When active, it periodically sends small movement reports to the connected host, preventing sleep or idle states.
 
-## Safety Notice
+## Hardware Requirements
 
-⚠️ **Warning**: Use responsibly and in accordance with your company's policies. This component is intended for personal use.
-
-## Troubleshooting
-
-### ESP32 BLE Failed Error
-
-If you see `esp32_ble is marked FAILED: unspecified` in logs, try these solutions:
-
-#### 1. Check BLE Configuration Conflicts
-
-Make sure you don't have conflicting BLE components:
-
-```yaml
-# REMOVE these if present - they conflict with ble_mouse_jiggler:
-# bluetooth_proxy:
-# esp32_ble_tracker:
-# esp32_ble_beacon:
-
-# KEEP only this:
-esp32_ble:
-```
-
-#### 2. Add BLE Debugging
-
-Enable detailed BLE logging to see what's failing:
-
-```yaml
-logger:
-  level: DEBUG
-  logs:
-    esp32_ble: DEBUG
-    ble_mouse_jiggler: DEBUG
-    component: DEBUG
-```
-
-#### 3. Check Memory Usage
-
-BLE requires significant RAM. If you have many other components, try:
-
-```yaml
-# Reduce memory usage
-logger:
-  level: WARN  # Less verbose logging
-
-# Remove unnecessary components temporarily
-# wifi:
-#   power_save_mode: light  # Use less WiFi features
-```
-
-#### 4. ESP32 Variant Issues
-
-Some ESP32 variants have BLE issues. Try:
-
-```yaml
-esp32:
-  board: esp32dev
-  framework:
-    type: arduino
-    version: recommended
-
-# Force BLE/WiFi coexistence
-esphome:
-  platformio_options:
-    board_build.partitions: "default.csv"
-    board_build.arduino.memory_type: "qio_qspi"
-```
-
-#### 5. Clean Build
-
-Sometimes a clean build helps:
-
-```bash
-# In ESPHome
-esphome clean your_config.yaml
-esphome compile your_config.yaml
-```
-
-#### 6. Minimal Test Configuration
-
-Try this minimal config first to isolate the issue:
-
-```yaml
-esphome:
-  name: ble-mouse-test
-  platform: ESP32
-  board: esp32dev
-
-wifi:
-  ssid: "your_wifi"
-  password: "your_password"
-
-logger:
-  level: DEBUG
-
-api:
-ota:
-
-# Only enable BLE - no other components
-esp32_ble:
-
-external_components:
-  - source: github://grozycki/esphome-ble-mouse-jiggler@main
-    components:
-      - ble_mouse_jiggler
-
-# Single mouse only for testing
-ble_mouse_jiggler:
-  id: test_mouse
-  device_name: "Test Mouse"
-```
-
-### Multiple mice not appearing
-- Ensure different `device_name` for each mouse
-- Check ESP32 memory usage in logs
-- Verify Bluetooth is enabled on target devices
-
-### Connection issues
-- Try pairing one mouse at a time
-- Clear Bluetooth cache on target device
-- Check ESP32 logs for connection events
-
-### Jiggling not working
-- Verify mouse is connected (check logs)
-- Ensure jiggling is enabled for specific mouse ID
-- Check automation triggers and actions
-
-## Credits
-
-This component utilizes the [ESP32-BLE-Mouse](https://github.com/T-vK/ESP32-BLE-Mouse) library by T-vK.
+- **ESP32** (not ESP8266) - Required for Bluetooth support.
+- **ESPHome 2025.9+** - The component relies on APIs available in this version or newer.
 
 ## License
 
