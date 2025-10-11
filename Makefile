@@ -2,7 +2,8 @@
 
 test:
 	@echo "Running compilation pipeline..."
-	@docker compose up --build --exit-code-from compile-espidf
+	# Use --timeout 0 to exit immediately after containers stop, without a grace period.
+	@docker compose up --build --exit-code-from compile-espidf --timeout 0
 
 clean:
 	@echo "Stopping containers and removing local build artifacts (cache is preserved)..."
