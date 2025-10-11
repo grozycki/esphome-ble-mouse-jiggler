@@ -361,22 +361,32 @@ void SimpleBLEMouse::execute_creation_step_() {
 }
 
 void SimpleBLEMouse::start_advertising_() {
-    esp_ble_adv_data_t adv_data = {};
-    adv_data.set_scan_rsp = false;
-    adv_data.include_name = true;
-    adv_data.include_txpower = true;
-    adv_data.appearance = 0x03C2; // Generic Mouse
-    adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
-    uint16_t service_uuid = 0x1812; // HID
-    adv_data.service_uuid_len = sizeof(service_uuid);
-    adv_data.p_service_uuid = (uint8_t*)&service_uuid;
+    static uint16_t service_uuid = 0x1812; // HID
+    static esp_ble_adv_data_t adv_data;
+    static esp_ble_adv_params_t adv_params;
+    static bool initialized = false;
 
-    esp_ble_adv_params_t adv_params = {};
-    adv_params.adv_int_min = 0x20;
-    adv_params.adv_int_max = 0x40;
-    adv_params.adv_type = ADV_TYPE_IND;
-    adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
-    adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
+    if (!initialized) {
+        initialized = true;
+
+        // Configure advertising data
+        adv_data = {}; // Zero-initialize
+        adv_data.set_scan_rsp = false;
+        adv_data.include_name = true;
+        adv_data.include_txpower = true;
+        adv_data.appearance = 0x03C2; // Generic Mouse
+        adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
+        adv_data.service_uuid_len = sizeof(service_uuid);
+        adv_data.p_service_uuid = (uint8_t*)&service_uuid;
+
+        // Configure advertising parameters
+        adv_params = {}; // Zero-initialize
+        adv_params.adv_int_min = 0x20;
+        adv_params.adv_int_max = 0x40;
+        adv_params.adv_type = ADV_TYPE_IND;
+        adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
+        adv_params.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
+    }
 
     esp_err_t ret = esp_ble_gap_config_adv_data(&adv_data);
     if (ret != ESP_OK) {
