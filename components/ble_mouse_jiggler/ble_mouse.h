@@ -1,49 +1,56 @@
 #pragma once
 
 #include "esphome/core/component.h"
-#include "esphome/core/automation.h" // Add missing include for Action
-#include "simple_ble_mouse.h"
+#include "esphome/core/automation.h"
+#include "esphome/components/esp32_ble_server/esp32_ble_server.h"
 
 #ifdef USE_ESP32
 
 namespace esphome {
 namespace ble_mouse_jiggler {
 
-class BleMouseJiggler : public Component {
-public:
-    void setup() override;
-    void loop() override;
-    void dump_config() override;
+class BleMouseJiggler : public Component, public esp32_ble_server::BLEServerCallbacks {
+ public:
+  BleMouseJiggler(esp32_ble_server::BLEServer *hub) : hub_(hub) {}
 
-    void set_device_name(const std::string &name) { this->device_name_ = name; }
-    void set_manufacturer(const std::string &manufacturer) { this->manufacturer_ = manufacturer; }
-    void set_battery_level(uint8_t level) { this->battery_level_ = level; }
-    void set_jiggle_interval(uint32_t interval) { this->jiggle_interval_ = interval; }
-    void set_jiggle_distance(int distance) { this->jiggle_distance_ = distance; }
-    void set_mouse_id(uint8_t id) { this->mouse_id_ = id; }
-    void set_pin_code(const std::string &pin) { this->pin_code_ = pin; }
+  void setup() override;
+  void loop() override;
+  void dump_config() override;
 
-    void start_jiggling();
-    void stop_jiggling();
-    void jiggle_once();
+  void on_connect(esp32_ble_server::BLEServer *server) override;
+  void on_disconnect(esp32_ble_server::BLEServer *server) override;
 
-    // Custom service for status checking
-    void on_jiggle_status(bool connected, bool jiggling, uint32_t interval);
+  void set_device_name(const std::string &name) { this->device_name_ = name; }
+  void set_manufacturer(const std::string &manufacturer) { this->manufacturer_ = manufacturer; }
+  void set_battery_level(uint8_t level);
+  void set_jiggle_interval(uint32_t interval) { this->jiggle_interval_ = interval; }
+  void set_jiggle_distance(int distance) { this->jiggle_distance_ = distance; }
 
-protected:
-    void jiggle_mouse_();
+  void start_jiggling();
+  void stop_jiggling();
+  void jiggle_once();
 
-    std::string device_name_{"ESP32 Mouse Jiggler"};
-    std::string manufacturer_{"ESPHome"};
-    uint8_t battery_level_{100};
-    uint32_t jiggle_interval_{60000};
-    int jiggle_distance_{1};
-    uint8_t mouse_id_{0};
-    std::string pin_code_{""};
+ protected:
+  void jiggle_mouse_();
+  void send_report(uint8_t buttons, int8_t x, int8_t y, int8_t wheel);
 
-    SimpleBLEMouse *ble_mouse_{nullptr};
-    bool jiggling_enabled_{false};
-    uint32_t last_jiggle_time_{0};
+  esp32_ble_server::BLEServer *hub_;
+
+  std::string device_name_{"ESP32 Mouse Jiggler"};
+  std::string manufacturer_{"ESPHome"};
+  uint8_t battery_level_{100};
+  uint32_t jiggle_interval_{60000};
+  int jiggle_distance_{1};
+
+  bool jiggling_enabled_{false};
+  uint32_t last_jiggle_time_{0};
+  bool client_connected_{false};
+
+  esp32_ble_server::BLEService *hid_service_{nullptr};
+  esp32_ble_server::BLECharacteristic *input_report_char_{nullptr};
+  esp32_ble_server::BLEService *battery_service_{nullptr};
+  esp32_ble_server::BLECharacteristic *battery_level_char_{nullptr};
+  esp32_ble_server::BLEService *dis_service_{nullptr};
 };
 
 // Automation actions

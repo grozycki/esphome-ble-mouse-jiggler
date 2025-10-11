@@ -1,105 +1,62 @@
 #pragma once
 
+#include "esphome/core/component.h"
+#include "esphome/core/defines.h"
+
 #ifdef USE_ESP32
 
-#include <string>
-#include <vector>
-#include <map>
-#include "esp_bt.h"
-#include "esp_gap_ble_api.h"
-#include "esp_gatts_api.h"
-#include "esp_bt_defs.h"
-#include "esp_bt_main.h"
-#include "esp_gatt_common_api.h"
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
 
-// Final, corrected state machine for service and characteristic creation
-enum class CreationState {
-    IDLE,
-    CREATING_HID_SERVICE,
-    STARTING_HID_SERVICE,
-    ADDING_HID_INFO_CHAR,
-    ADDING_HID_REPORT_MAP_CHAR,
-    ADDING_HID_CONTROL_POINT_CHAR,
-    ADDING_HID_REPORT_CHAR,
-    ADDING_HID_REPORT_CCCD,          // NEW
-    ADDING_HID_REPORT_REFERENCE,     // NEW
-    ADDING_PROTOCOL_MODE_CHAR,
-    CREATING_BATTERY_SERVICE,
-    STARTING_BATTERY_SERVICE,
-    ADDING_BATTERY_LEVEL_CHAR,
-    CREATING_DIS_SERVICE,
-    STARTING_DIS_SERVICE,
-    ADDING_DIS_MANUFACTURER_CHAR,
-    ADDING_DIS_MODEL_CHAR,
-    ADDING_DIS_PNP_ID_CHAR,
-    DONE
+// This is a workaround for a compilation error with ESP32 BLE Arduino library
+#include "freertos/ringbuf.h"
+
+namespace esphome {
+namespace ble_mouse_jiggler {
+
+class SimpleBLEMouse; // Forward declaration
+
+class ServerCallbacks: public BLEServerCallbacks {
+public:
+    ServerCallbacks(SimpleBLEMouse* mouse);
+    void onConnect(BLEServer* pServer) override;
+    void onDisconnect(BLEServer* pServer) override;
+private:
+    SimpleBLEMouse* mouse_;
 };
 
 class SimpleBLEMouse {
 public:
-    SimpleBLEMouse(const std::string& device_name = "ESP32 Mouse",
-                   const std::string& manufacturer = "ESPHome",
-                   uint8_t battery_level = 100,
-                   uint8_t mouse_id = 0,
-                   const std::string& pin_code = "");
-
+    SimpleBLEMouse(const std::string &device_name, const std::string &manufacturer, uint8_t battery_level);
     void begin();
     void end();
-    bool isConnected();
+    void click(uint8_t b);
     void move(int8_t x, int8_t y, int8_t wheel = 0);
-    void click(uint8_t button = 1);
-    void press(uint8_t button = 1);
-    void release(uint8_t button = 1);
+    void press(uint8_t b);
+    void release(uint8_t b);
+    bool isConnected();
     void setBatteryLevel(uint8_t level);
 
-    uint8_t getMouseId() const { return mouse_id_; }
-    std::string getDeviceName() const { return device_name_; }
-
-    static void initBluetooth();
-    static SimpleBLEMouse* getMouseById(uint8_t mouse_id);
-    static void ensureAdvertising(); // NEW helper
+protected:
+    friend class ServerCallbacks;
+    void onConnect();
+    void onDisconnect();
 
 private:
-    friend class BleMouseJiggler;
-
     std::string device_name_;
     std::string manufacturer_;
     uint8_t battery_level_;
-    uint8_t mouse_id_;
-    bool connected_;
-    std::string pin_code_;
+    bool connected_{false};
 
-    uint16_t gatts_if_;
-    uint16_t conn_id_;
-    uint16_t app_id_;
-
-    uint16_t hid_service_handle_;
-    uint16_t battery_service_handle_;
-    uint16_t dis_service_handle_;
-
-    uint16_t hid_report_char_handle_;
-    uint16_t battery_level_char_handle_;
-    uint16_t hid_report_cccd_handle_{0}; // NEW: store CCCD handle
-
-    CreationState creation_state_;
-
-    void execute_creation_step_();
-    void send_hid_report_(uint8_t* data, size_t length);
-    void start_advertising_();
-
-    static std::map<uint8_t, SimpleBLEMouse*> mice_instances_;
-    static std::map<uint16_t, SimpleBLEMouse*> app_to_mouse_map_;
-    static bool bluetooth_initialized_;
-    static uint16_t next_app_id_;
-
-    // New static members for improved advertising flow
-    static bool adv_data_configured_;
-    static bool advertising_active_;
-    static esp_ble_adv_params_t adv_params_;
-    static uint16_t adv_service_uuid_;
-
-    static void gap_event_handler_(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param);
-    static void gatts_event_handler_(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);
+    BLEServer* p_server_{nullptr};
+    BLECharacteristic* p_hid_report_char_{nullptr};
+    BLECharacteristic* p_battery_level_char_{nullptr};
+    BLEAdvertising* p_advertising_{nullptr};
 };
+
+} // namespace ble_mouse_jiggler
+} // namespace esphome
 
 #endif // USE_ESP32

@@ -7,8 +7,9 @@ esp32:
   framework:
     type: esp-idf
 
-# Enable BLE
-esp32_ble: {}
+# Enable BLE Server
+esp32_ble_server:
+  id: ble_server_hub
 
 external_components:
   - source:
@@ -16,3 +17,4 @@ external_components:
       path: /data/components
 
 ble_mouse_jiggler:
+  ble_server_id: ble_server_hub

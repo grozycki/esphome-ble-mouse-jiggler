@@ -1,5 +1,5 @@
-idf_component_register(
-    SRCS "ble_mouse.cpp" "simple_ble_mouse.cpp"
-    INCLUDE_DIRS "."
-    REQUIRES "bt" "driver" "nvs_flash"
-)
+set(COMPONENT_SRCS "ble_mouse.cpp")
+set(COMPONENT_ADD_INCLUDEDIRS ".")
+
+# Register the component with the build system.
+register_component()
