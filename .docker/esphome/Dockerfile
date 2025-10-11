@@ -1,6 +1,6 @@
-FROM esphome/esphome
+FROM esphome/esphome:stable
 
-RUN pip install esptool
+#RUN pip install esptool
 
 WORKDIR /data
 

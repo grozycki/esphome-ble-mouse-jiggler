@@ -2,7 +2,7 @@
 
 #include "esphome/core/component.h"
 #include "esphome/core/automation.h"
-#include "esphome/components/esp32_ble_server/esp32_ble_server.h"
+#include "esphome/components/esp32_ble_server/ble_server.h"
 
 #ifdef USE_ESP32
 
